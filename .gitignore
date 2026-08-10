@@ -1,0 +1,142 @@
+# Git Ignore Rules for Audit Log Service
+
+# Maven Build Output
+/target/
+/build/
+*.jar
+*.war
+*.rar
+*.zip
+
+# Maven-specific
+.mvn/
+mvnw
+mvnw.cmd
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+*.class
+*.classpath
+.project
+.settings/
+.vscode/
+*.swp
+*.swo
+
+# Eclipse IDE
+.classpath
+.project
+.settings/
+bin/
+
+# NetBeans
+/nbproject/
+.nb-gradle/
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# Runtime & Application Logs
+logs/
+*.log
+*.log.*
+application*.log
+
+# SQLite Database Files (Local Development)
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+audit-log-*.db
+
+# Local Environment Configuration
+.env
+.env.local
+.env.*.local
+local.properties
+application-local.yml
+application-local.yaml
+
+# OS-Generated Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.tmp
+*.temp
+
+# Secrets & Credentials (NEVER COMMIT)
+secrets/
+*.pem
+*.key
+*.crt
+*.p12
+*.jks
+.pgpass
+credentials.json
+secrets.properties
+
+# IDE Temporary Files
+*.swp
+*.swo
+*~
+.classpath
+.project
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+
+# Node Modules (if any frontend added later)
+node_modules/
+package-lock.json
+yarn.lock
+
+# Gradle Build (if switched from Maven)
+.gradle/
+build/
+*.gradle.lock
+
+# Python Virtual Environments (if scripts added)
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# MacOS
+.AppleDouble
+.LSOverride
+.AppleDB
+.AppleDesktop
+
+# Windows
+Thumbs.db
+ehthumbs.db
+
+# Backup Files
+*.bak
+*.backup
+*~
+*.swp
+
+# Temporary Test Files
+test-output/
+test-results/
+reports/
+
+# Docker
+docker-compose.override.yml
+.docker/
+
+# Session/Temporary State
+.copilot/
+session-state/
