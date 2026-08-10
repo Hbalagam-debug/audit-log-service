@@ -1,0 +1,7 @@
+spring:
+  datasource:
+    url: 'jdbc:sqlite:./test-db-test.db'
+    driver-class-name: org.sqlite.JDBC
+  sql:
+    init:
+      mode: always

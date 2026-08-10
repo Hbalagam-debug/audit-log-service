@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: audit-log-service
+  # No default datasource configured here. Use a profile-specific file (application-sqlite.yml) for SQLite.
+  # If a datasource is required in other environments, provide it via environment variables or a profile-specific config.
+  sql:
+    init:
+      mode: never
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+logging:
+  level:
+    com.auditlog.service: INFO

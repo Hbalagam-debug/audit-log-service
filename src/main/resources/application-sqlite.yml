@@ -1,0 +1,13 @@
+spring:
+  profiles: sqlite
+  datasource:
+    url: ${AUDIT_DB_URL:jdbc:sqlite:./data/audit-db.db}
+    driver-class-name: org.sqlite.JDBC
+    hikari:
+      maximum-pool-size: 1
+  sql:
+    init:
+      mode: always
+
+# SQLite-specific schema (executed when sqlite profile is active)
+# Place schema file as schema-sqlite.sql in src/main/resources if needed
