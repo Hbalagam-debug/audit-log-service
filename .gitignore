@@ -10,8 +10,14 @@
 
 # Maven-specific
 .mvn/
-mvnw
-mvnw.cmd
+!mvnw
+!mvnw.cmd
+!.mvn/
+!.mvn/wrapper/
+!.mvn/wrapper/maven-wrapper.properties
+
+# Local toolchain downloads used for validation
+.tools/
 
 # IntelliJ IDEA
 .idea/

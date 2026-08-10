@@ -2,9 +2,9 @@
 
 ## Project Status
 
-**Current Phase:** Step 1 — Requirement Analysis and Planning
+**Current Phase:** Step 2 — Spring Boot & Database Scaffold
 
-This is an individual interview assignment. The repository contains planning, architecture decisions, and requirement analysis only. Application code, builds, and tests are not yet generated.
+This repository now includes a Maven-based Spring Boot scaffold with a SQLite-backed data layer, schema initialization, repository/service/controller layers, and a basic test suite. The implementation remains a prototype and is intended to satisfy the initial scaffold requirements before later scenario work.
 
 ## Objective
 
@@ -75,9 +75,9 @@ This repository preserves genuine development history:
 
 ## Quick Links
 
-- Setup instructions: TBD (Step 2)
+- Setup instructions: Run `./mvnw test` (or `mvnw.cmd test` on Windows)
 - API documentation: TBD (Step 3+)
-- Test results: TBD (Step 4)
+- Test results: See Maven Surefire reports under `target/surefire-reports/`
 - Live defense notes: TBD (Post-submission)
 
 ---
