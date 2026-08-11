@@ -280,6 +280,171 @@ Before each future AI interaction, confirm:
 ---
 
 **Prepared by:** Copilot (AI-Assisted Engineering)  
+
+---
+
+## Entry: Cursor pagination defect diagnosis and repair
+
+**Date:** 2026-08-10
+
+**Task intent:** Fix the Scenario A cursor-pagination defect where a generated `nextCursor` from `GET /audit/events?actorId=user-123&limit=1` failed with HTTP 400 when sent unchanged to the next request.
+
+**Problem observed:**
+
+- Page 1 returned a non-null cursor.
+- Reusing that exact cursor on the same filtered endpoint failed instead of returning page 2.
+
+**Verified root cause:**
+
+There were two coupled defects in `QueryService`:
+
+1. **Broken decode symmetry**
+   - `encodeCursor` produced Base64URL of JSON like `{"chainPosition":1}`.
+   - `decodeCursor` tried to recover the value with manual string splitting that did not reliably parse the generated structure.
+   - It also assumed directly decodable Base64 input without restoring omitted URL-safe padding.
+
+2. **Cursor semantic mismatch**
+   - The encoded cursor represented the **last returned chain position**.
+   - The repository query incorrectly treated the decoded value as a SQL **OFFSET**.
+   - This violated the stated cursor contract and could skip, duplicate, or reject records depending on filters and decoded values.
+
+**Fix applied:**
+
+- Made cursor encode/decode perfectly symmetrical.
+- Kept cursor payload as UTF-8 JSON with Base64 URL-safe encoding and omitted padding on encode.
+- Restored missing Base64 padding on decode when required.
+- Replaced manual string-splitting with structured JSON parsing.
+- Added cursor validation:
+  - decoded payload must be a JSON object
+  - it must contain exactly one `chainPosition` field
+  - `chainPosition` must be a positive integral number
+- Introduced `InvalidCursorException` so malformed cursors return HTTP 400 with code `INVALID_CURSOR`.
+- Changed pagination query semantics from `OFFSET ?` to `chain_position > ?`, so the cursor now correctly represents the last returned record while preserving the same filters on subsequent pages.
+
+**Files changed:**
+
+- `src/main/java/com/auditlog/service/service/QueryService.java`
+- `src/main/java/com/auditlog/service/repository/AuditEventRepository.java`
+- `src/main/java/com/auditlog/service/service/InvalidCursorException.java`
+- `src/main/java/com/auditlog/service/api/ApiExceptionHandler.java`
+- `src/test/java/com/auditlog/service/service/QueryServiceTest.java`
+- `src/test/java/com/auditlog/service/integration/AuditEventIntegrationTest.java`
+
+**Tests added/expanded:**
+
+- Encode then decode returns the original position.
+- Generated `nextCursor` retrieves page two.
+- URL-safe cursors work unchanged on the next request.
+- Malformed cursors return HTTP 400 with `INVALID_CURSOR`.
+- `limit=1` over two events returns one item per page with no duplicates.
+
+**Actual validation results:**
+
+Command: `.\mvnw.cmd clean test`
+
+- `Tests run: 37, Failures: 0, Errors: 0, Skipped: 0`
+- `BUILD SUCCESS`
+
+Command: `.\mvnw.cmd clean package`
+
+- Package phase reran the full test suite successfully: `Tests run: 37, Failures: 0, Errors: 0, Skipped: 0`
+- Spring Boot repackaged `target\audit-log-service-0.0.1-SNAPSHOT.jar`
+- `BUILD SUCCESS`
+
+**Manual replay of the defect after the fix:**
+
+The application was started against a temporary SQLite database for isolated validation. Port 8080 was already in use in the shared environment, so manual validation was repeated on port 8081.
+
+1. Created two events for `actorId=user-123`
+2. Requested page 1:
+   - `GET http://localhost:8081/audit/events?actorId=user-123&limit=1`
+   - Response contained:
+     - first event id: `901ffee0-1345-4be1-ba6f-311e1655e0e4`
+     - `nextCursor`: `eyJjaGFpblBvc2l0aW9uIjoxfQ`
+3. Requested page 2 with the **exact same cursor unchanged**:
+   - `GET http://localhost:8081/audit/events?actorId=user-123&limit=1&cursor=eyJjaGFpblBvc2l0aW9uIjoxfQ`
+   - Response returned:
+     - second event id: `ad43047c-7bb6-4cff-9b58-91e1ddd6c400`
+     - `nextCursor: null`
+     - `hasMore: false`
+
+**Outcome:** The unchanged generated cursor now works correctly for page-two retrieval with the same filters.
+
+**Prepared by:** Copilot (AI-Assisted Engineering)
+
+---
+
+## Entry: Step 3 remaining test-failure repair
+
+**Date:** 2026-08-10
+
+**Task intent:** Fix the remaining 7 Scenario A test failures without deleting, disabling, or weakening tests.
+
+**Verified root causes and corrections:**
+
+1. **POST /audit/events returned HTTP 500 instead of 201**
+   - Reproduced with `.\mvnw.cmd "-Dtest=AuditEventIntegrationTest#testCreateEventReturns201" test`.
+   - Inspected MockMvc resolved exception and surefire output.
+   - Verified root cause: Spring Boot 4.1 request deserialization was using `tools.jackson`, while the request DTO/domain payload fields were typed as `com.fasterxml.jackson.databind.JsonNode`. This caused `HttpMessageConversionException` during request binding.
+   - Corrective action:
+     - Migrated payload-related production and test code to `tools.jackson.databind.*` / `tools.jackson.databind.json.JsonMapper`.
+     - Removed the unnecessary direct `com.fasterxml.jackson.core:jackson-databind` dependency from `pom.xml`.
+
+2. **Tampering tests always reported `CONTENT_HASH_MISMATCH`**
+   - Verified root cause: the fixtures were inserting fake hashes instead of a valid chain produced by the production hashing algorithm, so verification failed at content-hash recalculation before reaching the intended tampering condition.
+   - Corrective action:
+     - Rebuilt tampering fixtures with the production `CanonicalHashService`.
+     - Inserted valid records through the repository with production-calculated `content_hash` and `chain_hash`.
+     - Added explicit pre-tamper assertions that the chain verifies as intact.
+     - For `POSITION_GAP`, created a valid 3-record chain and then removed the middle record so the existing verification order correctly reports the gap before hash mismatch checks.
+
+3. **Invalid payload integration test returned 413 instead of 400**
+   - Verified root cause: `ApiExceptionHandler` treated any `IllegalArgumentException` message containing the word `payload` as `413 Payload Too Large`, which incorrectly classified `payload is required`.
+   - Corrective action:
+     - Narrowed 413 classification to the actual size-exceeded message (`exceeds maximum size`).
+
+4. **Boot 4 JSON canonicalization migration details**
+   - While completing the Jackson migration, `tools.jackson.databind.JsonNode` required a small canonicalization update because the old `fieldNames()` API is not available there.
+   - Corrective action:
+     - Updated canonical object-key traversal to use `node.properties()`.
+
+**Files changed:**
+
+- `pom.xml`
+- `src/main/java/com/auditlog/service/api/ApiExceptionHandler.java`
+- `src/main/java/com/auditlog/service/api/dto/AuditEventCreateRequest.java`
+- `src/main/java/com/auditlog/service/api/dto/AuditEventResponse.java`
+- `src/main/java/com/auditlog/service/domain/AuditEvent.java`
+- `src/main/java/com/auditlog/service/repository/AuditEventRepository.java`
+- `src/main/java/com/auditlog/service/service/AuditEventService.java`
+- `src/main/java/com/auditlog/service/service/CanonicalHashService.java`
+- `src/main/java/com/auditlog/service/service/QueryService.java`
+- `src/test/java/com/auditlog/service/integration/AuditEventIntegrationTest.java`
+- `src/test/java/com/auditlog/service/integration/TamperingDetectionTest.java`
+- `src/test/java/com/auditlog/service/service/AuditEventServiceTest.java`
+- `src/test/java/com/auditlog/service/service/CanonicalHashServiceTest.java`
+
+**Actual validation results:**
+
+Command: `.\mvnw.cmd clean test`
+
+- `AuditLogServiceApplicationTests` — Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
+- `DatabaseInitializationTest` — Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
+- `AuditEventIntegrationTest` — Tests run: 5, Failures: 0, Errors: 0, Skipped: 0
+- `TamperingDetectionTest` — Tests run: 4, Failures: 0, Errors: 0, Skipped: 0
+- `AuditEventServiceTest` — Tests run: 5, Failures: 0, Errors: 0, Skipped: 0
+- `CanonicalHashServiceTest` — Tests run: 7, Failures: 0, Errors: 0, Skipped: 0
+- `TimestampNormalizerTest` — Tests run: 7, Failures: 0, Errors: 0, Skipped: 0
+- Total: `Tests run: 30, Failures: 0, Errors: 0, Skipped: 0`
+- Result: `BUILD SUCCESS`
+
+Command: `.\mvnw.cmd clean package`
+
+- Package phase reran the full test suite successfully: `Tests run: 30, Failures: 0, Errors: 0, Skipped: 0`
+- Spring Boot repackaged `target\audit-log-service-0.0.1-SNAPSHOT.jar`
+- Result: `BUILD SUCCESS`
+
+**Prepared by:** Copilot (AI-Assisted Engineering)
 **Reviewed by:** TODO (engineer sign-off required)  
 **Document Version:** 1.0 (Step 1)  
 **Next Update:** After engineer review and approval of Step 1
