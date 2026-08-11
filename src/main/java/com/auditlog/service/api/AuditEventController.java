@@ -3,11 +3,14 @@ package com.auditlog.service.api;
 import com.auditlog.service.api.dto.AuditEventCreateRequest;
 import com.auditlog.service.api.dto.AuditEventResponse;
 import com.auditlog.service.api.dto.QueryResponse;
+import com.auditlog.service.api.dto.RetentionRunRequest;
+import com.auditlog.service.api.dto.RetentionRunResponse;
 import com.auditlog.service.api.dto.VerificationResultResponse;
 import com.auditlog.service.domain.AuditEvent;
 import com.auditlog.service.service.AuditEventService;
 import com.auditlog.service.service.ChainVerificationService;
 import com.auditlog.service.service.QueryService;
+import com.auditlog.service.service.RetentionService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -19,15 +22,18 @@ public class AuditEventController {
     private final AuditEventService auditEventService;
     private final QueryService queryService;
     private final ChainVerificationService verificationService;
+    private final RetentionService retentionService;
 
     public AuditEventController(
         AuditEventService auditEventService,
         QueryService queryService,
-        ChainVerificationService verificationService
+        ChainVerificationService verificationService,
+        RetentionService retentionService
     ) {
         this.auditEventService = auditEventService;
         this.queryService = queryService;
         this.verificationService = verificationService;
+        this.retentionService = retentionService;
     }
 
     @PostMapping("/events")
@@ -45,7 +51,8 @@ public class AuditEventController {
         @RequestParam(required = false) String from,
         @RequestParam(required = false) String to,
         @RequestParam(required = false) String cursor,
-        @RequestParam(required = false) Integer limit
+        @RequestParam(required = false) Integer limit,
+        @RequestParam(required = false, defaultValue = "false") boolean includeArchived
     ) {
         QueryResponse response = queryService.query(
             actorId,
@@ -55,8 +62,15 @@ public class AuditEventController {
             from,
             to,
             cursor,
-            limit
+            limit,
+            includeArchived
         );
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/retention/run")
+    public ResponseEntity<RetentionRunResponse> runRetention(@Valid @RequestBody RetentionRunRequest request) {
+        RetentionRunResponse response = retentionService.runRetention(request);
         return ResponseEntity.ok(response);
     }
 

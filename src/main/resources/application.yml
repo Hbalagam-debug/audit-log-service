@@ -10,3 +10,9 @@ spring:
 logging:
   level:
     com.auditlog.service: INFO
+
+audit:
+  retention:
+    window-days: 90
+    default-dry-run: true
+    require-approval: true

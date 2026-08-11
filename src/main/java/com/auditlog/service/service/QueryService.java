@@ -33,7 +33,8 @@ public class QueryService {
         String from,
         String to,
         String cursor,
-        Integer limit
+        Integer limit,
+        boolean includeArchived
     ) {
         if (limit == null) {
             limit = DEFAULT_LIMIT;
@@ -66,7 +67,8 @@ public class QueryService {
             from,
             to,
             afterChainPosition,
-            limit + 1
+            limit + 1,
+            includeArchived
         );
 
         boolean hasMore = results.size() > limit;

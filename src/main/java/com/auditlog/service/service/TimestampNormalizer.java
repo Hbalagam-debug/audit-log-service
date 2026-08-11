@@ -1,5 +1,6 @@
 package com.auditlog.service.service;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -10,8 +11,12 @@ public class TimestampNormalizer {
     private static final long CLOCK_SKEW_TOLERANCE_MILLIS = 3600_000L;
 
     public static String normalizeToUtcString(String timestamp) {
+        return normalizeToUtcString(timestamp, Clock.systemUTC());
+    }
+
+    public static String normalizeToUtcString(String timestamp, Clock clock) {
         if (timestamp == null || timestamp.trim().isEmpty()) {
-            return nowUtcString();
+            return nowUtcString(clock);
         }
 
         try {
@@ -23,7 +28,7 @@ public class TimestampNormalizer {
             OffsetDateTime odt = OffsetDateTime.parse(normalized, ISO_OFFSET);
             Instant instant = odt.toInstant();
             
-            long now = Instant.now().toEpochMilli();
+            long now = clock.instant().toEpochMilli();
             long provided = instant.toEpochMilli();
             long diff = Math.abs(now - provided);
             
@@ -44,7 +49,11 @@ public class TimestampNormalizer {
     }
 
     public static String nowUtcString() {
-        return Instant.now().atZone(ZoneId.of("UTC"))
+        return nowUtcString(Clock.systemUTC());
+    }
+
+    public static String nowUtcString(Clock clock) {
+        return clock.instant().atZone(ZoneId.of("UTC"))
             .format(ISO_OFFSET)
             .replace("+00:00", "Z");
     }

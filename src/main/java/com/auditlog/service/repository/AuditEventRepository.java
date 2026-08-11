@@ -91,10 +91,15 @@ public class AuditEventRepository {
         String fromTimestamp,
         String toTimestamp,
         Long afterChainPosition,
-        long limit
+        long limit,
+        boolean includeArchived
     ) {
         StringBuilder sql = new StringBuilder("SELECT * FROM audit_events WHERE 1=1");
         java.util.List<Object> params = new java.util.ArrayList<>();
+
+        if (!includeArchived) {
+            sql.append(" AND is_archived = FALSE");
+        }
 
         if (actorId != null) {
             sql.append(" AND actor_id = ?");
@@ -137,10 +142,15 @@ public class AuditEventRepository {
         String resourceId,
         String eventType,
         String fromTimestamp,
-        String toTimestamp
+        String toTimestamp,
+        boolean includeArchived
     ) {
         StringBuilder sql = new StringBuilder("SELECT COUNT(*) FROM audit_events WHERE 1=1");
         java.util.List<Object> params = new java.util.ArrayList<>();
+
+        if (!includeArchived) {
+            sql.append(" AND is_archived = FALSE");
+        }
 
         if (actorId != null) {
             sql.append(" AND actor_id = ?");
@@ -169,6 +179,17 @@ public class AuditEventRepository {
 
         Long count = jdbcTemplate.queryForObject(sql.toString(), params.toArray(), Long.class);
         return count == null ? 0 : count;
+    }
+
+    public long countUnarchivedOlderThan(String cutoffTimestamp) {
+        String sql = "SELECT COUNT(*) FROM audit_events WHERE is_archived = FALSE AND event_type <> ? AND ingested_at < ?";
+        Long count = jdbcTemplate.queryForObject(sql, Long.class, "RETENTION_RUN_EXECUTED", cutoffTimestamp);
+        return count == null ? 0 : count;
+    }
+
+    public int archiveEligibleEvents(String cutoffTimestamp, String retentionRunId, String archivedBy, String reason, String archivedAt) {
+        String sql = "UPDATE audit_events SET is_archived = TRUE, archived_at = ?, archived_by = ?, archive_reason = ?, retention_run_id = ? WHERE is_archived = FALSE AND event_type <> ? AND ingested_at < ?";
+        return jdbcTemplate.update(sql, archivedAt, archivedBy, reason, retentionRunId, "RETENTION_RUN_EXECUTED", cutoffTimestamp);
     }
 
     public List<AuditEvent> findAllOrderedByPosition() {

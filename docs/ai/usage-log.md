@@ -19,3 +19,30 @@ Summary:
 Scope note:
 - This entry covers documentation revision only.
 - No production code, SQL schema, configuration, or tests were implemented.
+
+## Entry: Scenario B retention checkpoint failure diagnosis and repair
+
+Date: 2026-08-11
+
+Failing output captured before repair:
+- `RetentionControllerIntegrationTest.testQueryExcludesArchivedByDefaultAndIncludesWhenRequested`: expected 1 item but received 2.
+- `AuditLogServiceApplicationTests.contextLoads`: `ApplicationContext` failed while initializing JDBC/schema state.
+- `RetentionControllerIntegrationTest.testAppliedRunArchivesEligibleRowsAndAppendsCertificateEvent`: expected one `RETENTION_RUN_EXECUTED` event but query returned zero rows.
+- `RetentionControllerIntegrationTest.testApplyWithoutApprovalDataReturns400`: `IllegalArgumentException` escaped MockMvc instead of returning HTTP 400.
+
+Diagnosed causes:
+- The archived-query failure was a test expectation issue, not a repository filtering bug: default queries correctly excluded the archived historical row, but still returned the active `RECENT_EVENT` plus the legitimate `RETENTION_RUN_EXECUTED` certificate event.
+- The context smoke test used a persistent SQLite file and stale startup exclusions; on an existing pre-retention database, `schema.sql` attempted to create retention indexes before the runtime initializer could add the new columns.
+- The certificate-event failure was caused by production code not linking the appended certificate event back to `retention_run_id`, so the test query found zero matching rows even though the event existed.
+- The HTTP 400 failure came from the standalone retention integration test not wiring the existing global `ApiExceptionHandler`, combined with retention request validation living only in service-layer exceptions.
+
+Accepted fixes:
+- Kept the repository query contract unchanged and updated the retention query test to assert the documented behavior: archived rows are excluded by default, while non-archived certificate events remain visible.
+- Removed the controller-local ad hoc exception mapping, enabled `@Valid` on the retention endpoint, added bean validation to `RetentionRunRequest`, introduced a retention-specific validation exception, and routed standalone MockMvc through the existing global `ApiExceptionHandler`.
+- Preserved append-only retention behavior and updated the certificate creation path to stamp the new `RETENTION_RUN_EXECUTED` row with `retention_run_id`.
+- Made startup safer for existing SQLite databases by leaving retention-column indexes to `DatabaseSchemaInitializer` instead of creating them unconditionally in `schema.sql`.
+- Updated the application context smoke test to use the real test SQLite datasource with an isolated temporary database and no `DataSourceAutoConfiguration` exclusion.
+
+Rejected suggestions:
+- Rejected hiding `RETENTION_RUN_EXECUTED` from default queries just to make the test pass, because certificate events are valid non-archived audit events and the API contract does not exclude them.
+- Rejected weakening or removing the failing assertions, skipping tests, or inserting certificate rows directly from the test, because those would mask production behavior instead of verifying it.

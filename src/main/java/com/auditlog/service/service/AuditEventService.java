@@ -3,9 +3,11 @@ package com.auditlog.service.service;
 import com.auditlog.service.api.dto.AuditEventCreateRequest;
 import com.auditlog.service.domain.AuditEvent;
 import com.auditlog.service.repository.AuditEventRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
+import java.time.Clock;
 import java.util.UUID;
 
 @Service
@@ -13,11 +15,18 @@ public class AuditEventService {
     private static final long MAX_PAYLOAD_SIZE = 1_000_000L;
     private final AuditEventRepository repository;
     private final CanonicalHashService hashService;
+    private final Clock clock;
     private final Object writeLock = new Object();
 
     public AuditEventService(AuditEventRepository repository, CanonicalHashService hashService) {
+        this(repository, hashService, Clock.systemUTC());
+    }
+
+    @Autowired
+    public AuditEventService(AuditEventRepository repository, CanonicalHashService hashService, Clock clock) {
         this.repository = repository;
         this.hashService = hashService;
+        this.clock = clock;
     }
 
     @Transactional(isolation = Isolation.SERIALIZABLE)
@@ -26,8 +35,8 @@ public class AuditEventService {
             validateRequest(request);
 
             String id = UUID.randomUUID().toString();
-            String normalizedTimestamp = TimestampNormalizer.normalizeToUtcString(request.getTimestamp());
-            String ingestedAt = TimestampNormalizer.nowUtcString();
+            String normalizedTimestamp = TimestampNormalizer.normalizeToUtcString(request.getTimestamp(), clock);
+            String ingestedAt = TimestampNormalizer.nowUtcString(clock);
 
             long chainPosition = repository.findMaxChainPosition().orElse(0L) + 1;
             String previousHash = chainPosition == 1 ? hashService.getGenesisHash() : 
