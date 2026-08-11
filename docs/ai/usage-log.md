@@ -283,6 +283,115 @@ Before each future AI interaction, confirm:
 
 ---
 
+## Entry: Step 4 Scenario B design analysis
+
+**Date:** 2026-08-10
+
+**Task Intent:**
+
+Perform design analysis only for Scenario B: retention, structured redaction, and verifiable bulk export. Read the approved requirements, implementation plan, architecture decisions, current Scenario A code and tests, and produce a design document without modifying production code, schema, or tests.
+
+**Prompt Summary:**
+
+The engineer requested a new design document at `docs/architecture/scenario-b-design.md` covering:
+
+- retention strategy comparison and recommendation
+- structured redaction options and recommendation
+- bulk export trust model and recommendation
+- proposed API contracts
+- security constraints
+- testing plan
+- decision records including context, alternatives, recommendation, trade-offs, limitations, migration impact, and human sign-off requirement
+
+The engineer also required this interaction to be appended to the AI usage log with status **Pending engineer review**.
+
+**AI Output Summary:**
+
+Generated:
+
+- `docs/architecture/scenario-b-design.md`
+
+The design document:
+
+- analyzes physical deletion vs. soft deletion vs. soft archival
+- recommends soft archival for the prototype
+- explains why in-place payload redaction breaks Scenario A `contentHash`
+- compares encryption with key destruction, field-level commitments, and redaction overlay
+- recommends redaction overlay plus append-only `REDACTION_APPLIED` certificate event for prototype compatibility
+- states explicitly that existing Scenario A records can only be safely redacted as masked views, not irreversibly erased, under the current hash model
+- compares unsigned digest, HMAC, and digital signature for exports
+- recommends signed export manifests using a persisted configured signing key
+- proposes request/response contracts for retention, redaction, and export endpoints
+- lists security controls and a Scenario B testing matrix
+- records explicit human-review decisions
+
+**What Was Accepted:**
+
+✅ Design-analysis-only deliverable for Scenario B
+
+✅ Explicit compatibility analysis against current Scenario A hashing and verification behavior
+
+✅ Honest limitations around archival, redaction, and subset export completeness
+
+✅ Recommendation that no implementation proceed without engineer sign-off
+
+**What Was Modified:**
+
+None during this checkpoint.
+
+**What Was Rejected:**
+
+❌ Production code changes
+
+❌ Schema changes
+
+❌ Test changes
+
+❌ Any claim that existing Scenario A records can be irreversibly redacted without redesign
+
+❌ Any claim that subset exports can independently prove full global-chain completeness without additional trust anchors
+
+**Engineering Rationale:**
+
+The analysis was grounded in the current implementation:
+
+- Scenario A stores original payload bytes in `audit_events.payload_json`
+- `contentHash` is recomputed from that original payload during verification
+- any in-place payload mutation would break verification
+- the chain is globally ordered and append-only, which makes physical deletion and subset export continuity non-trivial
+
+Given those constraints:
+
+- soft archival is the least misleading retention model for the prototype
+- overlay-based masking is the only safe redaction model for existing records without hash migration
+- signed manifests are the most appropriate export trust mechanism for independent verification by third parties
+
+**Validation Performed:**
+
+- ✅ Read Scenario B sections in `docs/requirements/requirement-analysis.md`
+- ✅ Read Scenario B stages in `docs/planning/implementation-plan.md`
+- ✅ Read relevant ADRs in `docs/architecture/decisions.md`
+- ✅ Read current Scenario A hash, query, verification, controller, repository, and schema code
+- ✅ Read current Scenario A integration and tampering tests
+- ✅ Produced design-only documentation with no production/test/schema modification
+
+**Limitations:**
+
+1. This checkpoint is design only; no implementation feasibility was proven in code.
+2. A separate `docs/architecture/hash-chain-design.md` file was not present in the repository, so the analysis relied on the current Scenario A implementation and existing planning/requirements documentation.
+3. The recommended prototype redaction model does not provide cryptographic erasure of already-written Scenario A payloads.
+4. Export signatures improve provenance and integrity but do not eliminate the need for external trust if completeness must be proven against a global chain.
+
+**Human Sign-Off Status:**
+
+🔴 **Pending engineer review**
+
+No commits or pushes were performed.
+
+**Prepared by:** Copilot (AI-Assisted Engineering)
+
+---
+
 ## Entry: Cursor pagination defect diagnosis and repair
 
 **Date:** 2026-08-10
