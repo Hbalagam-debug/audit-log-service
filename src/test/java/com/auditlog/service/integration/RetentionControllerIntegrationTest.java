@@ -9,11 +9,13 @@ import com.auditlog.service.api.dto.VerificationResultResponse;
 import com.auditlog.service.config.ExportProperties;
 import com.auditlog.service.config.RedactionProperties;
 import com.auditlog.service.config.RetentionProperties;
+import com.auditlog.service.config.ComplianceReportProperties;
 import com.auditlog.service.domain.AuditEvent;
 import com.auditlog.service.repository.AuditEventRepository;
 import com.auditlog.service.service.AuditEventService;
 import com.auditlog.service.service.CanonicalHashService;
 import com.auditlog.service.service.ChainVerificationService;
+import com.auditlog.service.service.ComplianceReportService;
 import com.auditlog.service.service.ExportService;
 import com.auditlog.service.service.QueryService;
 import com.auditlog.service.service.RedactionService;
@@ -98,6 +100,12 @@ class RetentionControllerIntegrationTest {
             new ExportProperties(),
             fixedClock
         );
+        ComplianceReportProperties complianceReportProperties = new ComplianceReportProperties();
+        ComplianceReportService complianceReportService = new ComplianceReportService(
+            auditEventRepository,
+            redactionViewService,
+            complianceReportProperties
+        );
         AuditEventController controller = new AuditEventController(
             auditEventService,
             queryService,
@@ -105,7 +113,8 @@ class RetentionControllerIntegrationTest {
             retentionService,
             redactionService,
             redactionViewService,
-            exportService
+            exportService,
+            complianceReportService
         );
 
         this.mockMvc = MockMvcBuilders.standaloneSetup(controller)

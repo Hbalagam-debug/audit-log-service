@@ -2,6 +2,8 @@ package com.auditlog.service.api;
 
 import com.auditlog.service.api.dto.AuditEventCreateRequest;
 import com.auditlog.service.api.dto.AuditEventResponse;
+import com.auditlog.service.api.dto.ComplianceReportRequest;
+import com.auditlog.service.api.dto.ComplianceReportResponse;
 import com.auditlog.service.api.dto.QueryResponse;
 import com.auditlog.service.api.dto.RedactionRequest;
 import com.auditlog.service.api.dto.RedactionResponse;
@@ -11,6 +13,7 @@ import com.auditlog.service.api.dto.VerificationResultResponse;
 import com.auditlog.service.domain.AuditEvent;
 import com.auditlog.service.service.AuditEventService;
 import com.auditlog.service.service.ChainVerificationService;
+import com.auditlog.service.service.ComplianceReportService;
 import com.auditlog.service.service.QueryService;
 import com.auditlog.service.service.RedactionService;
 import com.auditlog.service.service.ExportService;
@@ -31,6 +34,7 @@ public class AuditEventController {
     private final RedactionService redactionService;
     private final RedactionViewService redactionViewService;
     private final ExportService exportService;
+    private final ComplianceReportService complianceReportService;
 
     public AuditEventController(
         AuditEventService auditEventService,
@@ -39,7 +43,8 @@ public class AuditEventController {
         RetentionService retentionService,
         RedactionService redactionService,
         RedactionViewService redactionViewService,
-        ExportService exportService
+        ExportService exportService,
+        ComplianceReportService complianceReportService
     ) {
         this.auditEventService = auditEventService;
         this.queryService = queryService;
@@ -48,6 +53,7 @@ public class AuditEventController {
         this.redactionService = redactionService;
         this.redactionViewService = redactionViewService;
         this.exportService = exportService;
+        this.complianceReportService = complianceReportService;
     }
 
     @PostMapping("/events")
@@ -115,5 +121,34 @@ public class AuditEventController {
     ) {
         tools.jackson.databind.JsonNode bundle = exportService.export(actorId, resourceId, from, to, includeArchived);
         return ResponseEntity.ok(bundle);
+    }
+
+    @GetMapping("/compliance/access-report")
+    public ResponseEntity<ComplianceReportResponse> getComplianceAccessReport(
+        @RequestParam(required = false) String accountId,
+        @RequestParam(required = false) String resourceId,
+        @RequestParam(required = false) String from,
+        @RequestParam(required = false) String to,
+        @RequestParam(required = false) String actorId,
+        @RequestParam(required = false) String action,
+        @RequestParam(required = false) String outcome,
+        @RequestParam(required = false, defaultValue = "false") boolean includeArchived,
+        @RequestParam(required = false) String cursor,
+        @RequestParam(required = false) Integer limit
+    ) {
+        ComplianceReportRequest request = new ComplianceReportRequest(
+            accountId,
+            resourceId,
+            from,
+            to,
+            actorId,
+            action,
+            outcome,
+            includeArchived,
+            cursor,
+            limit
+        );
+        ComplianceReportResponse response = complianceReportService.queryAccessReport(request);
+        return ResponseEntity.ok(response);
     }
 }
