@@ -165,11 +165,24 @@ Returns a deterministic, verifiable JSON bundle of audit events filtered by a si
 | `redactedRecordsPresent` | `true` if any record has masked fields |
 | `redactedRecordsNote` | Explanation when redacted records are present, null otherwise |
 | `bundleDigest` | SHA-256 of the canonical JSON of the unsigned bundle: the entire bundle excluding `bundleDigest` and any present or future top-level `signature*` / `signing*` fields |
+| `signature` | Ed25519 signature block containing `algorithm`, `keyId`, `value`, and `publicKey` |
 
 **Digest representation:**
 - `recordsDigest` is computed from the canonical JSON of the ordered `records` array only.
 - `bundleDigest` is computed from the canonical JSON of the full bundle after removing `bundleDigest` itself and any signature-related top-level fields, so signing can be added later without circular hashing.
 - Both digests reuse the service's existing canonical JSON serializer, which sorts object keys deterministically.
+- **Exactly signed bytes:** the service decodes the lowercase hexadecimal `bundleDigest` into its 32 raw SHA-256 bytes and signs those 32 bytes with Ed25519. It does **not** sign pretty-printed JSON or the hexadecimal text itself.
+
+**Signature block:**
+
+```json
+"signature": {
+  "algorithm": "Ed25519",
+  "keyId": "export-key-2026-01",
+  "value": "<Base64 signature>",
+  "publicKey": "<Base64 X.509 encoded public key>"
+}
+```
 
 **Error responses:**
 - `400` — both or neither selectors provided; invalid timestamp range
@@ -186,17 +199,43 @@ The `ExportVerifier` service can be injected or instantiated independently to ve
 
 ```java
 ExportVerifier.VerificationResult result = exportVerifier.verify(bundleJson);
-// result.valid()              — true if both digests match
-// result.recordsDigestStatus() — "MATCH" or "MISMATCH"
-// result.bundleDigestStatus()  — "MATCH" or "MISMATCH"
-// result.errors()              — list of mismatch detail messages
+// result.valid()              — true if digests, manifest, and signature all verify
+// result.recordsDigestValid() — true if recordsDigest matches
+// result.bundleDigestValid()  — true if bundleDigest matches
+// result.signatureValid()     — true if the Ed25519 signature verifies
+// result.keyId()              — signature keyId from the bundle
+// result.errors()             — mismatch and compatibility detail messages
 ```
 
-For offline CLI-style verification, run the utility main class with a bundle file path:
+For offline CLI-style verification, run the utility main class with a bundle file path. To enforce a trusted key binding, also pass the expected `keyId` and Base64 X.509 public key:
 
 ```text
 java -cp target\classes com.auditlog.service.service.ExportVerifierCli path\to\bundle.json
+java -cp target\classes com.auditlog.service.service.ExportVerifierCli path\to\bundle.json export-key-2026-01 <Base64-X509-public-key>
 ```
+
+## Local signing-key setup
+
+The application fails fast when `audit.export.signing.enabled=true` and valid Ed25519 signing keys are not configured.
+
+Configure these environment variables before starting the service locally:
+
+```text
+AUDIT_EXPORT_SIGNING_PRIVATE_KEY_BASE64=<Base64 PKCS#8 Ed25519 private key>
+AUDIT_EXPORT_SIGNING_PUBLIC_KEY_BASE64=<Base64 X.509 Ed25519 public key>
+```
+
+Generate a local test-only key pair with:
+
+```text
+java -cp target\classes com.auditlog.service.service.ExportSigningKeyGeneratorCli
+```
+
+The generator prints a clear warning and emits shell-ready values for:
+- `AUDIT_EXPORT_SIGNING_PRIVATE_KEY_BASE64`
+- `AUDIT_EXPORT_SIGNING_PUBLIC_KEY_BASE64`
+
+These generated keys are for **local testing only** and must not be committed or used as production signing keys.
 
 ---
 

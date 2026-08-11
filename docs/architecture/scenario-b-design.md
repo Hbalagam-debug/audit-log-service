@@ -2,7 +2,7 @@
 
 Status: Partially implemented
 Human sign-off required: Yes
-Implementation scope: Checkpoints A-D are now implemented in the prototype codebase; the signing checkpoint remains pending.
+Implementation scope: Checkpoints A-E are now implemented in the prototype codebase; final integration/documentation cleanup remains pending.
 
 ## Final recommendation for the prototype
 
@@ -83,7 +83,7 @@ Implementation status for this checkpoint:
 - Redaction for encrypted pointers destroys local wrapped-DEK access and appends a `REDACTION_APPLIED` certificate event without rewriting historical payload rows.
 - Legacy plaintext records still rely on presentation masking from Checkpoint B and are not migrated in this checkpoint.
 - Checkpoint D is now implemented for deterministic export bundles and offline digest verification.
-- Checkpoint E remains pending for Ed25519 signing.
+- Checkpoint E is now implemented for Ed25519 signing, trusted keyId/public-key verification, and offline signature verification.
 
 ### 2.3 Local prototype key management
 
@@ -98,9 +98,11 @@ Implementation status for this checkpoint:
 
 - Export uses a canonical JSON bundle.
 - The bundle includes a deterministic SHA-256 digest.
-- The bundle is signed with Ed25519 asymmetric signature material in the final design, but that signing step remains deferred to Checkpoint E.
-- Export metadata will eventually include signingKeyId and signature details.
-- Verification will eventually use the public key corresponding to the signing key.
+- The bundle is signed with Ed25519 asymmetric signature material.
+- The signature covers the 32 raw bytes obtained by decoding the hexadecimal `bundleDigest`.
+- The signature block is excluded from `bundleDigest` input so digesting and signing are not circular.
+- Export metadata includes `keyId`, the Base64 signature value, and the Base64 X.509 public key for the prototype bundle.
+- Verification uses the trusted public key corresponding to the signing key and rejects unexpected `keyId` bindings.
 - The export manifest includes first/last exported chain positions, the first previousHash, the last chainHash, and a sorted record-ID/position digest.
 
 ### 3.2 What the export proves
@@ -149,6 +151,7 @@ D. Export manifest/digest implementation
 
 E. Export signature implementation
 - Implement Ed25519 signing, signature metadata, signingKeyId, verification, and public-key validation.
+- Status: Implemented in code on 2026-08-11 with PKCS#8 private-key loading, X.509 public-key loading, and trusted keyId verification.
 
 F. Complete integration tests and documentation
 - Validate the end-to-end retention, redaction, and export behavior and update documentation to reflect the approved prototype design.
@@ -171,7 +174,7 @@ F. Complete integration tests and documentation
 
 ## 8. Human approval status
 
-- Status: Partially implemented in code through Checkpoint D; broader Scenario B review still required
+- Status: Partially implemented in code through Checkpoint E; broader Scenario B review still required
 - Human sign-off remains required before treating the remaining export work as complete
 - This document remains the design baseline for the unfinished Scenario B checkpoints
 

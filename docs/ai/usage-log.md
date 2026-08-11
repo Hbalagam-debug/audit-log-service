@@ -108,3 +108,31 @@ Human modifications and engineering judgment:
 Rejected suggestions:
 - Rejected including both actorId and resourceId simultaneously, because this creates ambiguous overlapping selection semantics and is explicitly excluded in the checkpoint spec.
 - Rejected signing the bundle with Ed25519, because the checkpoint spec limits this prototype to digest-only verification without key management infrastructure.
+
+## Entry: Scenario B Checkpoint 5 — Ed25519 export signing and offline verification
+
+Date: 2026-08-11
+
+Prompt summary:
+- Implement the next Scenario B bulk-export checkpoint for Ed25519 signing and offline signature verification.
+- Sign exactly the 32 raw bytes obtained by decoding the hexadecimal `bundleDigest`.
+- Add a `signature` block with `algorithm`, `keyId`, `value`, and `publicKey`.
+- Load PKCS#8/X.509 signing keys from configuration, fail fast on missing or invalid keys, and provide a local key-generation utility.
+- Extend offline verification to validate manifest compatibility, digests, Ed25519 signatures, and trusted keyId/public-key bindings.
+
+Accepted changes:
+- Extended `ExportProperties` with nested signing configuration and fail-fast validation for algorithm support, key presence, Base64 decoding, PKCS#8/X.509 parsing, and matching public/private key pairs.
+- Added Ed25519 signing to `ExportService` while preserving the existing unsigned bundle contract: `bundleDigest` is still computed without the `signature` block, then the hex digest is decoded to 32 raw bytes for signing.
+- Kept the documented `signature` object name and field names (`algorithm`, `keyId`, `value`, `publicKey`) rather than redesigning the export envelope.
+- Expanded `ExportVerifier` so it now validates manifest/hash/canonicalization versions, recomputes both digests, verifies Ed25519 signatures, and enforces trusted keyId/public-key binding when local configuration is available.
+- Updated `ExportVerifierCli` to support optional trusted-key verification arguments and added `ExportSigningKeyGeneratorCli` for local test-only key generation.
+- Supplied deterministic test-only signing keys through `DynamicPropertySource` instead of source-controlled application YAML and added integration/unit coverage for signed exports, tampering, wrong keys, unsupported algorithms, and invalid key configuration.
+
+Human modifications and engineering judgment:
+- Preserved the existing bundle field layout from Checkpoint D and added only the required `signature` block, avoiding any redesign of the manifest or digest fields.
+- Chose to verify `keyId` against the locally trusted configured public key when available, so tampering with either `keyId` or `publicKey` fails cleanly instead of trusting arbitrary embedded key material.
+- Returned the prototype public key inside the bundle for portability, while still allowing stricter offline verification with an explicit trusted key binding.
+
+Rejected suggestions:
+- Rejected signing the canonical JSON text directly, because the checkpoint explicitly requires signing the raw bytes decoded from `bundleDigest`.
+- Rejected generating a new runtime signing key automatically when configuration is missing, because the checkpoint requires fail-fast behavior and stable key identity for verifiable origin.

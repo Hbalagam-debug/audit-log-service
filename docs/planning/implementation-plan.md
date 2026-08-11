@@ -2,7 +2,7 @@
 
 Status: Partially implemented
 Human sign-off required: Yes
-Scope: Checkpoints A-D are implemented in the local prototype; Checkpoints E-F remain the review baseline.
+Scope: Checkpoints A-E are implemented in the local prototype; Checkpoint F remains the review baseline.
 
 ## Overview
 
@@ -31,13 +31,14 @@ The next implementation work is divided into independent checkpoints so that ret
 - Implement canonical JSON bundle generation.
 - Compute deterministic SHA-256 digests.
 - Include manifest metadata for positions, previousHash, chainHash, and sorted record digests.
-- Status: Implemented in code on 2026-08-11; Ed25519 signing remains deferred.
+- Status: Implemented in code on 2026-08-11.
 
 ## Checkpoint E — Export signature implementation
 
 - Implement Ed25519 signing and verification.
 - Add signingKeyId and signature metadata.
 - Validate public-key-based verification.
+- Status: Implemented in code on 2026-08-11 using Ed25519 signatures over the raw bytes decoded from `bundleDigest`.
 
 ## Checkpoint F — Complete integration tests and documentation
 
@@ -47,4 +48,4 @@ The next implementation work is divided into independent checkpoints so that ret
 ## Notes
 
 - The implementation order above still reflects the approved sequence for the prototype.
-- Current code now covers Checkpoints A-D without authentication and without historical row rewrites.
+- Current code now covers Checkpoints A-E without authentication and without historical row rewrites.

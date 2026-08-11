@@ -120,6 +120,9 @@ public class ExportService {
 
         String bundleDigest = ExportDigestSupport.computeBundleDigest(canonicalHashService, bundle);
         bundle.put("bundleDigest", bundleDigest);
+        if (exportProperties.getSigning().isEnabled()) {
+            bundle.set("signature", buildSignatureNode(bundleDigest));
+        }
         return bundle;
     }
 
@@ -258,6 +261,21 @@ public class ExportService {
             return;
         }
         node.put(fieldName, value);
+    }
+
+    private ObjectNode buildSignatureNode(String bundleDigest) {
+        ObjectNode signatureNode = objectMapper.createObjectNode();
+        signatureNode.put("algorithm", exportProperties.getSigning().getAlgorithm());
+        signatureNode.put("keyId", exportProperties.getSigning().getKeyId());
+        signatureNode.put(
+            "value",
+            com.auditlog.service.config.ExportSignatureSupport.signDigestToBase64(
+                bundleDigest,
+                exportProperties.getSigning().getResolvedPrivateKey()
+            )
+        );
+        signatureNode.put("publicKey", exportProperties.getSigning().getNormalizedPublicKeyBase64());
+        return signatureNode;
     }
 
     private record ExportSelection(

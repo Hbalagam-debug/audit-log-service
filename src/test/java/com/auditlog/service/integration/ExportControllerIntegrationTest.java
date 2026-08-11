@@ -25,10 +25,15 @@ import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.Base64;
 import java.util.Map;
+import java.security.KeyPairGenerator;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -122,6 +127,7 @@ class ExportControllerIntegrationTest extends SpringBootTestSupport {
         assertEquals("export-actor", records.get(1).get("actorId").asText());
         assertTrue(records.get(0).get("chainPosition").asLong() < records.get(1).get("chainPosition").asLong());
         assertEquals("REPRODUCIBLE_FROM_EXPORT", records.get(0).get("contentHashVerificationStatus").asText());
+        assertEquals("Ed25519", bundle.get("signature").get("algorithm").asText());
     }
 
     @Test
@@ -229,7 +235,7 @@ class ExportControllerIntegrationTest extends SpringBootTestSupport {
     }
 
     @Test
-    @DisplayName("Deterministic digest with fixed clock produces identical bundles")
+    @DisplayName("Same unsigned bundle content produces the same verifiable Ed25519 signature")
     void testDeterministicDigestWithFixedClock() throws Exception {
         createEvent("deterministic-actor", "RESOURCE", "res-1", Map.of("action", "create"));
 
@@ -247,10 +253,55 @@ class ExportControllerIntegrationTest extends SpringBootTestSupport {
         assertEquals(bundle1.get("recordsDigest").asText(), bundle2.get("recordsDigest").asText());
         assertEquals(bundle1.get("bundleDigest").asText(), bundle2.get("bundleDigest").asText());
         assertEquals("2024-01-01T00:00:00Z", bundle1.get("generatedAt").asText());
+        assertEquals(
+            bundle1.get("signature").get("value").asText(),
+            bundle2.get("signature").get("value").asText()
+        );
+        assertTrue(exportVerifier.verify(bundle1.toString()).valid());
     }
 
     @Test
-    @DisplayName("Tamper detection: modified top-level field causes bundleDigest MISMATCH")
+    @DisplayName("Valid Ed25519 signed export verifies successfully")
+    void testSignedExportVerifiesSuccessfully() throws Exception {
+        createEvent("signed-actor", "RESOURCE", "res-1", Map.of("action", "create"));
+
+        MvcResult result = mockMvc.perform(get("/audit/exports")
+            .param("actorId", "signed-actor"))
+            .andExpect(status().isOk())
+            .andReturn();
+
+        JsonNode bundle = objectMapper.readTree(result.getResponse().getContentAsString());
+        JsonNode signature = bundle.get("signature");
+
+        assertEquals("Ed25519", signature.get("algorithm").asText());
+        assertEquals("export-key-2026-01", signature.get("keyId").asText());
+        assertEquals(TEST_EXPORT_SIGNING_PUBLIC_KEY_BASE64, signature.get("publicKey").asText());
+
+        ExportVerifier.VerificationResult verificationResult = exportVerifier.verify(bundle.toString());
+        assertTrue(verificationResult.valid());
+        assertTrue(verificationResult.recordsDigestValid());
+        assertTrue(verificationResult.bundleDigestValid());
+        assertTrue(verificationResult.signatureValid());
+        assertEquals("export-key-2026-01", verificationResult.keyId());
+    }
+
+    @Test
+    @DisplayName("Signature value is Base64 and decodes to the Ed25519 signature length")
+    void testSignatureIsBase64AndExpectedLength() throws Exception {
+        createEvent("signature-length-actor", "RESOURCE", "res-1", Map.of("action", "create"));
+
+        MvcResult result = mockMvc.perform(get("/audit/exports")
+            .param("actorId", "signature-length-actor"))
+            .andExpect(status().isOk())
+            .andReturn();
+
+        JsonNode bundle = objectMapper.readTree(result.getResponse().getContentAsString());
+        byte[] signatureBytes = Base64.getDecoder().decode(bundle.get("signature").get("value").asText());
+        assertEquals(64, signatureBytes.length);
+    }
+
+    @Test
+    @DisplayName("Modified manifest field fails bundle verification")
     void testTamperDetectionChangedValue() throws Exception {
         createEvent("tamper-actor", "RESOURCE", "res-1", Map.of("action", "create"));
 
@@ -265,11 +316,13 @@ class ExportControllerIntegrationTest extends SpringBootTestSupport {
 
         ExportVerifier.VerificationResult vr = exportVerifier.verify(tampered.toString());
         assertFalse(vr.valid());
-        assertEquals("MISMATCH", vr.bundleDigestStatus());
+        assertTrue(vr.recordsDigestValid());
+        assertFalse(vr.bundleDigestValid());
+        assertTrue(vr.signatureValid());
     }
 
     @Test
-    @DisplayName("Tamper detection: modified record causes recordsDigest MISMATCH")
+    @DisplayName("Modified record fails recordsDigest and bundle verification")
     void testTamperDetectionChangedRecord() throws Exception {
         createEvent("tamper-record-actor", "RESOURCE", "res-1", Map.of("action", "create"));
 
@@ -285,7 +338,89 @@ class ExportControllerIntegrationTest extends SpringBootTestSupport {
 
         ExportVerifier.VerificationResult vr = exportVerifier.verify(tampered.toString());
         assertFalse(vr.valid());
-        assertEquals("MISMATCH", vr.recordsDigestStatus());
+        assertFalse(vr.recordsDigestValid());
+        assertFalse(vr.bundleDigestValid());
+        assertTrue(vr.signatureValid());
+    }
+
+    @Test
+    @DisplayName("Modified signature fails signature verification")
+    void testModifiedSignatureFailsVerification() throws Exception {
+        createEvent("tamper-signature-actor", "RESOURCE", "res-1", Map.of("action", "create"));
+
+        MvcResult result = mockMvc.perform(get("/audit/exports")
+            .param("actorId", "tamper-signature-actor"))
+            .andExpect(status().isOk())
+            .andReturn();
+
+        ObjectNode tampered = (ObjectNode) objectMapper.readTree(result.getResponse().getContentAsString());
+        ((ObjectNode) tampered.get("signature")).put(
+            "value",
+            Base64.getEncoder().encodeToString(new byte[64])
+        );
+
+        ExportVerifier.VerificationResult vr = exportVerifier.verify(tampered.toString());
+        assertFalse(vr.valid());
+        assertTrue(vr.recordsDigestValid());
+        assertTrue(vr.bundleDigestValid());
+        assertFalse(vr.signatureValid());
+    }
+
+    @Test
+    @DisplayName("Changing keyId fails verification against the trusted key configuration")
+    void testModifiedKeyIdFailsVerification() throws Exception {
+        createEvent("tamper-keyid-actor", "RESOURCE", "res-1", Map.of("action", "create"));
+
+        MvcResult result = mockMvc.perform(get("/audit/exports")
+            .param("actorId", "tamper-keyid-actor"))
+            .andExpect(status().isOk())
+            .andReturn();
+
+        ObjectNode tampered = (ObjectNode) objectMapper.readTree(result.getResponse().getContentAsString());
+        ((ObjectNode) tampered.get("signature")).put("keyId", "different-key-id");
+
+        ExportVerifier.VerificationResult vr = exportVerifier.verify(tampered.toString());
+        assertFalse(vr.valid());
+        assertFalse(vr.signatureValid());
+        assertTrue(vr.errors().stream().anyMatch(error -> error.contains("Untrusted signature keyId")));
+    }
+
+    @Test
+    @DisplayName("Verification with a different trusted public key fails")
+    void testWrongPublicKeyFailsVerification() throws Exception {
+        createEvent("wrong-public-key-actor", "RESOURCE", "res-1", Map.of("action", "create"));
+
+        MvcResult result = mockMvc.perform(get("/audit/exports")
+            .param("actorId", "wrong-public-key-actor"))
+            .andExpect(status().isOk())
+            .andReturn();
+
+        KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("Ed25519");
+        String wrongPublicKey = Base64.getEncoder().encodeToString(keyPairGenerator.generateKeyPair().getPublic().getEncoded());
+        ExportVerifier wrongKeyVerifier = new ExportVerifier(canonicalHashService, "export-key-2026-01", wrongPublicKey);
+
+        ExportVerifier.VerificationResult vr = wrongKeyVerifier.verify(result.getResponse().getContentAsString());
+        assertFalse(vr.valid());
+        assertFalse(vr.signatureValid());
+    }
+
+    @Test
+    @DisplayName("Unsupported signature algorithm fails cleanly")
+    void testUnsupportedAlgorithmFailsCleanly() throws Exception {
+        createEvent("unsupported-algorithm-actor", "RESOURCE", "res-1", Map.of("action", "create"));
+
+        MvcResult result = mockMvc.perform(get("/audit/exports")
+            .param("actorId", "unsupported-algorithm-actor"))
+            .andExpect(status().isOk())
+            .andReturn();
+
+        ObjectNode tampered = (ObjectNode) objectMapper.readTree(result.getResponse().getContentAsString());
+        ((ObjectNode) tampered.get("signature")).put("algorithm", "RSA");
+
+        ExportVerifier.VerificationResult vr = exportVerifier.verify(tampered.toString());
+        assertFalse(vr.valid());
+        assertFalse(vr.signatureValid());
+        assertTrue(vr.errors().stream().anyMatch(error -> error.contains("Unsupported signature.algorithm")));
     }
 
     @Test
@@ -414,5 +549,21 @@ class ExportControllerIntegrationTest extends SpringBootTestSupport {
 
         mockMvc.perform(get("/audit/exports").param("actorId", "overload-actor"))
             .andExpect(status().isPayloadTooLarge());
+    }
+
+    @Test
+    @DisplayName("Source-controlled configuration and docs do not leak the test export signing keys")
+    void testSourceControlledFilesDoNotLeakTestSigningKeys() throws Exception {
+        for (String relativePath : java.util.List.of(
+            "src\\main\\resources\\application.yml",
+            "src\\test\\resources\\application-test.yml",
+            "README.md",
+            "docs\\architecture\\scenario-b-design.md",
+            "docs\\ai\\usage-log.md"
+        )) {
+            String content = Files.readString(Path.of(relativePath), StandardCharsets.UTF_8);
+            assertFalse(content.contains(TEST_EXPORT_SIGNING_PRIVATE_KEY_BASE64), relativePath);
+            assertFalse(content.contains(TEST_EXPORT_SIGNING_PUBLIC_KEY_BASE64), relativePath);
+        }
     }
 }

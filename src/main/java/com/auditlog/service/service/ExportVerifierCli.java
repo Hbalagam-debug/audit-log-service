@@ -10,19 +10,23 @@ public final class ExportVerifierCli {
     }
 
     public static void main(String[] args) throws IOException {
-        if (args.length != 1) {
-            System.err.println("Usage: ExportVerifierCli <bundle-json-file>");
+        if (args.length != 1 && args.length != 3) {
+            System.err.println("Usage: ExportVerifierCli <bundle-json-file> [trusted-key-id trusted-public-key-base64]");
             System.exit(2);
             return;
         }
 
         String bundleJson = Files.readString(Path.of(args[0]), StandardCharsets.UTF_8);
-        ExportVerifier verifier = new ExportVerifier(new CanonicalHashService());
+        ExportVerifier verifier = args.length == 3
+            ? new ExportVerifier(new CanonicalHashService(), args[1], args[2])
+            : new ExportVerifier(new CanonicalHashService());
         ExportVerifier.VerificationResult result = verifier.verify(bundleJson);
 
         System.out.println("valid=" + result.valid());
-        System.out.println("recordsDigestStatus=" + result.recordsDigestStatus());
-        System.out.println("bundleDigestStatus=" + result.bundleDigestStatus());
+        System.out.println("recordsDigestValid=" + result.recordsDigestValid());
+        System.out.println("bundleDigestValid=" + result.bundleDigestValid());
+        System.out.println("signatureValid=" + result.signatureValid());
+        System.out.println("keyId=" + result.keyId());
         for (String error : result.errors()) {
             System.out.println("error=" + error);
         }
