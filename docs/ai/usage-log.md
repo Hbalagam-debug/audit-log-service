@@ -136,3 +136,40 @@ Human modifications and engineering judgment:
 Rejected suggestions:
 - Rejected signing the canonical JSON text directly, because the checkpoint explicitly requires signing the raw bytes decoded from `bundleDigest`.
 - Rejected generating a new runtime signing key automatically when configuration is missing, because the checkpoint requires fail-fast behavior and stable key identity for verifiable origin.
+
+## Entry: Scenario C single hybrid architecture refinement and documentation revision
+
+Date: 2026-08-11 (revision)
+
+Prompt summary:
+- Revise Scenario C documentation to present one final selected architecture only.
+- Replace multi-approach comparison with single cohesive hybrid: direct queries over immutable audit_events + reuse of Scenario B Ed25519 signed export.
+- Document alternatives considered but rejected.
+- Clarify certificate-event flow with safe metadata only.
+- Ensure all design documents end with Proposed status, no code/schema/test changes.
+
+Accepted changes:
+- Updated `docs/architecture/scenario-c-design.md` to present the hybrid architecture as one cohesive solution, not multiple approaches.
+- Replaced detailed multi-approach comparison matrix with concise "Alternatives considered but rejected" rationale.
+- Clarified single source of truth (immutable `audit_events` only).
+- Documented interactive GET endpoint (unsigned JSON, cursor-paginated) and signed POST endpoint (Ed25519 regulatory bundle).
+- Added explicit certificate-event flow: build snapshot, compute digest, sign, append COMPLIANCE_REPORT_GENERATED before return, store safe metadata only, exclude certificate from bundle it certifies, fail if signing/persistence fails.
+- Updated `docs/architecture/decisions.md` (ADR-012) to describe single hybrid architecture, API contracts, rejected alternatives, and certificate flow.
+- Updated `docs/planning/implementation-plan.md` checkpoint G to document design-only status and single selected architecture.
+- Updated `docs/requirements/scenario-c-requirement-analysis.md` to reflect single architecture and clarify prototype assumptions.
+- Ensured all documents end with: Status: PROPOSED — DESIGN ONLY; Production code changed: NO; Schema changed: NO; Tests changed: NO; Human approval required before implementation: YES.
+- Clearly separated unresolved Product/Compliance questions from approved prototype assumptions.
+
+Scope note:
+- This revision covers documentation only.
+- No production code, SQL schema, configuration, or tests were implemented or modified.
+- No commit or push performed.
+
+Rejected suggestions:
+- Rejected keeping the multi-approach comparison matrix, because the hybrid approach is now finalized and presenting multiple options would confuse the single selected architecture.
+- Rejected deferred completeness anchoring language, because the decision explicitly defers completeness to production while the signature semantics are clarified now.
+
+Human modifications and engineering judgment:
+- Chose to present the hybrid architecture as one unified solution with explicit API contract (GET for interactive unsigned, POST for signed regulatory) to minimize ambiguity.
+- Clarified that the certificate event is appended **before** returning success to ensure atomicity and audit trail completeness.
+- Emphasized that the certificate is **excluded** from the bundle it certifies to prevent circular dependencies.

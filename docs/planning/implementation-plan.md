@@ -2,7 +2,7 @@
 
 Status: Partially implemented
 Human sign-off required: Yes
-Scope: Checkpoints A-E are implemented in the local prototype; Checkpoint F remains the review baseline.
+Scope: Scenario B Checkpoints A-E are implemented in the local prototype; Scenario B Checkpoint F and Scenario C implementation remain pending.
 
 ## Overview
 
@@ -44,8 +44,35 @@ The next implementation work is divided into independent checkpoints so that ret
 
 - Run end-to-end integration tests across retention, redaction, and export behavior.
 - Update the architecture documentation and implementation notes to reflect the approved prototype design.
+- Validate automated tests, manual validation, commit and push.
+- Status: **COMPLETED on 2026-08-11** — All integration tests passing, documentation updated, changes committed and pushed to repository.
+
+## Checkpoint G — Scenario C single hybrid architecture design
+
+- Normalize the ambiguous compliance requirement for regulatory access reporting.
+- Define and select a single cohesive hybrid architecture: direct queries over immutable `audit_events` + reuse of Scenario B Ed25519 signed export.
+- Document normalized client-account access-event taxonomy and mandatory event fields.
+- Explicitly document that signatures prove integrity/authenticity, not completeness.
+- Document `COMPLIANCE_REPORT_GENERATED` certificate event and its exclusion from client-data-access results.
+- Define GET vs POST endpoint distinction (unsigned interactive queries vs. signed regulatory bundles).
+- Define certificate-event flow with safe metadata only.
+- Document unresolved Product/Compliance questions separate from prototype assumptions.
+- Replace multi-approach comparison matrix with "Alternatives considered but rejected" rationale.
+- Status: **DESIGN-ONLY checkpoint completed on 2026-08-11** — no production code/schema/test changes.
+
+## Checkpoint H — Scenario C prototype implementation and tests (deferred)
+
+- Implement normalized access-report query behavior over immutable audit events.
+- Add bounded UTC range validation, account/resource selector constraints, and cursor pagination.
+- Reuse Scenario B masking and optional signed bundle export for compliance delivery.
+- Append report-generation certificate events and add integration/unit test coverage.
+- Status: Deferred pending human approval of Scenario C design.
 
 ## Notes
 
-- The implementation order above still reflects the approved sequence for the prototype.
-- Current code now covers Checkpoints A-E without authentication and without historical row rewrites.
+- The implementation order reflects the approved sequence for the prototype.
+- Current code covers Scenario B Checkpoints A–F, all completed and committed.
+- Scenario C checkpoint G is design-only; design documents now present one single cohesive hybrid architecture (direct queries over `audit_events` + Scenario B Ed25519 signed export reuse) as the final selected approach, not multiple competing implementations.
+- Rejected alternatives explicitly documented: dedicated compliance read model (duplication/drift risk), external warehouse (operational complexity), signed-export-only (lacks interactive queries).
+- Unresolved Product/Compliance questions clearly separated from prototype assumptions.
+- Scenario C implementation (checkpoint H) remains deferred pending human approval of the final design.
