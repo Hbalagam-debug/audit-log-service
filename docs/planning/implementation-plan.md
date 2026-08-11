@@ -1,8 +1,8 @@
 ﻿# Implementation Plan — Audit Log Service
 
-Status: Proposed
+Status: Partially implemented
 Human sign-off required: Yes
-Scope: Documentation-first planning only; implementation remains deferred until review is complete.
+Scope: Checkpoints A-D are implemented in the local prototype; Checkpoints E-F remain the review baseline.
 
 ## Overview
 
@@ -31,6 +31,7 @@ The next implementation work is divided into independent checkpoints so that ret
 - Implement canonical JSON bundle generation.
 - Compute deterministic SHA-256 digests.
 - Include manifest metadata for positions, previousHash, chainHash, and sorted record digests.
+- Status: Implemented in code on 2026-08-11; Ed25519 signing remains deferred.
 
 ## Checkpoint E — Export signature implementation
 
@@ -45,5 +46,5 @@ The next implementation work is divided into independent checkpoints so that ret
 
 ## Notes
 
-- No Java code, SQL schema, configuration, or tests are created in this documentation-only revision.
-- The implementation order above reflects the approved sequence for the prototype.
+- The implementation order above still reflects the approved sequence for the prototype.
+- Current code now covers Checkpoints A-D without authentication and without historical row rewrites.

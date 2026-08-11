@@ -53,7 +53,7 @@ public class CanonicalHashService {
         return canonicalizeJson(node);
     }
 
-    private String sha256Hex(String input) {
+    public String sha256Hex(String input) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] hashBytes = digest.digest(input.getBytes(StandardCharsets.UTF_8));

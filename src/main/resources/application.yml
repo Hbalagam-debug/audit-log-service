@@ -26,3 +26,5 @@ audit:
     algorithm: AES-256-GCM
     sensitive-pointers: /accountNumber,/personalIdentifier
     master-key-base64: ${AUDIT_ENCRYPTION_MASTER_KEY_BASE64:}
+  export:
+    max-records: 10000

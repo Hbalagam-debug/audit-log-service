@@ -127,9 +127,76 @@ For encrypted Scenario B records, successful reads return decrypted values while
 ## Quick Links
 
 - Setup instructions: Run `./mvnw test` (or `mvnw.cmd test` on Windows)
-- API documentation: TBD (Step 3+)
+- API documentation: See below
 - Test results: See Maven Surefire reports under `target/surefire-reports/`
 - Live defense notes: TBD (Post-submission)
+
+## Export API
+
+### GET /audit/exports
+
+Returns a deterministic, verifiable JSON bundle of audit events filtered by a single selector.
+
+**Required (exactly one):**
+- `actorId` — export all events for this actor
+- `resourceId` — export all events for this resource
+
+**Optional:**
+- `from` — ISO-8601 UTC timestamp (inclusive lower bound)
+- `to` — ISO-8601 UTC timestamp (exclusive upper bound)
+- `includeArchived` — boolean, default `false`
+
+**Response bundle fields:**
+
+| Field | Description |
+|---|---|
+| `manifestVersion` | Always `"1"` |
+| `generatedAt` | ISO-8601 UTC timestamp of bundle creation |
+| `selection` | Object describing the query parameters used |
+| `recordCount` | Number of records in the bundle |
+| `firstChainPosition` / `lastChainPosition` | Chain anchors (null if empty) |
+| `firstPreviousHash` / `lastChainHash` | Hash chain link anchors |
+| `hashVersion` | Always `"v1"` |
+| `canonicalizationVersion` | Always `"v1"` |
+| `records` | Array of full event records |
+| `records[].contentHashVerificationStatus` | `"REPRODUCIBLE_FROM_EXPORT"` unless the exported payload is masked or sanitized for privacy |
+| `records[].contentHashVerificationNote` | Explanation when exported presentation prevents independent `contentHash` recomputation |
+| `recordsDigest` | SHA-256 of the canonical JSON of the `records` array |
+| `redactedRecordsPresent` | `true` if any record has masked fields |
+| `redactedRecordsNote` | Explanation when redacted records are present, null otherwise |
+| `bundleDigest` | SHA-256 of the canonical JSON of the unsigned bundle: the entire bundle excluding `bundleDigest` and any present or future top-level `signature*` / `signing*` fields |
+
+**Digest representation:**
+- `recordsDigest` is computed from the canonical JSON of the ordered `records` array only.
+- `bundleDigest` is computed from the canonical JSON of the full bundle after removing `bundleDigest` itself and any signature-related top-level fields, so signing can be added later without circular hashing.
+- Both digests reuse the service's existing canonical JSON serializer, which sorts object keys deterministically.
+
+**Error responses:**
+- `400` — both or neither selectors provided; invalid timestamp range
+- `413` — result set exceeds `audit.export.max-records` (default 10000)
+
+**Example:**
+```
+GET /audit/exports?actorId=user-123&from=2026-01-01T00:00:00Z&to=2026-02-01T00:00:00Z
+```
+
+### Offline verification
+
+The `ExportVerifier` service can be injected or instantiated independently to verify any exported bundle JSON:
+
+```java
+ExportVerifier.VerificationResult result = exportVerifier.verify(bundleJson);
+// result.valid()              — true if both digests match
+// result.recordsDigestStatus() — "MATCH" or "MISMATCH"
+// result.bundleDigestStatus()  — "MATCH" or "MISMATCH"
+// result.errors()              — list of mismatch detail messages
+```
+
+For offline CLI-style verification, run the utility main class with a bundle file path:
+
+```text
+java -cp target\classes com.auditlog.service.service.ExportVerifierCli path\to\bundle.json
+```
 
 ---
 

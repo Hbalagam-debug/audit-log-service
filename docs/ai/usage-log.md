@@ -77,3 +77,34 @@ Rejected suggestions:
 - Rejected rewriting historical legacy payloads or rehashing old rows, because Checkpoint 3 explicitly preserves Checkpoint 2 legacy overlay semantics.
 - Rejected storing plaintext, sensitive-value hashes, ciphertext copies, or wrapped-key bytes inside certificate events, because the certificate must remain non-sensitive metadata only.
 - Rejected adding a default operational master key to application configuration, because startup must fail fast when encryption is enabled without explicit key configuration.
+
+## Entry: Scenario B Checkpoint 4 — deterministic verifiable bulk export
+
+Date: 2026-08-11
+
+Prompt summary:
+- Implement Scenario B Checkpoint 4: deterministic, verifiable bulk export endpoint.
+- Add `GET /audit/exports` supporting actorId or resourceId (exactly one required), optional from/to timestamp range, and includeArchived flag.
+- Produce a canonical JSON bundle with recordsDigest and bundleDigest computed via existing CanonicalHashService.
+- Provide an offline ExportVerifier utility that re-computes both digests and reports MATCH/MISMATCH per field.
+- Add ExportProperties configuration with max-records limit (10000 prod, 100 test).
+- Write integration tests covering selector validation, timestamp validation, archived filtering, ordering, determinism, tamper detection, privacy masking, empty export, and max-size rejection.
+
+Accepted changes:
+- Made `sha256Hex` in `CanonicalHashService` public so `ExportService` and `ExportVerifier` can reuse the same implementation.
+- Created `ExportProperties` bound to `audit.export.max-records` with a safe default of 10000.
+- Created `ExportService` that validates selector exclusivity, normalizes timestamp bounds, fetches with an overflow probe (maxRecords+1), applies redaction view masking, adds explicit per-record content-hash verification limitations for masked/sanitized exports, and computes recordsDigest then bundleDigest independently.
+- Created `ExportVerifier` plus `ExportVerifierCli` so exported bundles can be re-verified offline without any signing key infrastructure.
+- Added `GET /audit/exports` to AuditEventController with ExportService injected via constructor.
+- Added integration coverage for actor/resource export, selector validation, invalid timestamp input, archival filtering, deterministic clock behavior, tamper detection, legacy masking, destroyed encrypted-field privacy, empty export, and max-size rejection.
+- Added unit coverage for digest determinism, bundleDigest exclusion rules, digest sensitivity to record changes, and empty-array canonical form.
+
+Human modifications and engineering judgment:
+- The bundle uses canonical JSON key sorting via the existing canonicalizeValue method, ensuring digests are independent of field insertion order in ObjectNode.
+- The bundleDigest covers the entire bundle including the records array and recordsDigest, so any tampering of any field is detected by bundleDigest alone; recordsDigest provides a fast path for isolating whether the record set itself changed.
+- Signature-related top-level fields are intentionally excluded from bundleDigest input so a later Ed25519 checkpoint can sign the already-finalized unsigned bundle without circular hashing.
+- The injected `Clock` is now used directly by ExportService so bundle timestamps and digests remain deterministic under a fixed test clock.
+
+Rejected suggestions:
+- Rejected including both actorId and resourceId simultaneously, because this creates ambiguous overlapping selection semantics and is explicitly excluded in the checkpoint spec.
+- Rejected signing the bundle with Ed25519, because the checkpoint spec limits this prototype to digest-only verification without key management infrastructure.

@@ -13,6 +13,7 @@ import com.auditlog.service.service.AuditEventService;
 import com.auditlog.service.service.ChainVerificationService;
 import com.auditlog.service.service.QueryService;
 import com.auditlog.service.service.RedactionService;
+import com.auditlog.service.service.ExportService;
 import com.auditlog.service.service.RedactionViewService;
 import com.auditlog.service.service.RetentionService;
 import jakarta.validation.Valid;
@@ -29,6 +30,7 @@ public class AuditEventController {
     private final RetentionService retentionService;
     private final RedactionService redactionService;
     private final RedactionViewService redactionViewService;
+    private final ExportService exportService;
 
     public AuditEventController(
         AuditEventService auditEventService,
@@ -36,7 +38,8 @@ public class AuditEventController {
         ChainVerificationService verificationService,
         RetentionService retentionService,
         RedactionService redactionService,
-        RedactionViewService redactionViewService
+        RedactionViewService redactionViewService,
+        ExportService exportService
     ) {
         this.auditEventService = auditEventService;
         this.queryService = queryService;
@@ -44,6 +47,7 @@ public class AuditEventController {
         this.retentionService = retentionService;
         this.redactionService = redactionService;
         this.redactionViewService = redactionViewService;
+        this.exportService = exportService;
     }
 
     @PostMapping("/events")
@@ -99,5 +103,17 @@ public class AuditEventController {
         return ResponseEntity.ok(
             VerificationResultResponse.fromDomain(verificationService.verify())
         );
+    }
+
+    @GetMapping("/exports")
+    public ResponseEntity<tools.jackson.databind.JsonNode> exportEvents(
+        @RequestParam(required = false) String actorId,
+        @RequestParam(required = false) String resourceId,
+        @RequestParam(required = false) String from,
+        @RequestParam(required = false) String to,
+        @RequestParam(required = false, defaultValue = "false") boolean includeArchived
+    ) {
+        tools.jackson.databind.JsonNode bundle = exportService.export(actorId, resourceId, from, to, includeArchived);
+        return ResponseEntity.ok(bundle);
     }
 }

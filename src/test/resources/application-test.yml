@@ -20,3 +20,5 @@ audit:
     format-version: enc-v1
     algorithm: AES-256-GCM
     sensitive-pointers: /accountNumber,/personalIdentifier
+  export:
+    max-records: 100
