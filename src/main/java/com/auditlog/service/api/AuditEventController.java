@@ -2,6 +2,7 @@ package com.auditlog.service.api;
 
 import com.auditlog.service.api.dto.AuditEventCreateRequest;
 import com.auditlog.service.api.dto.AuditEventResponse;
+import com.auditlog.service.api.dto.ComplianceBundleRequest;
 import com.auditlog.service.api.dto.ComplianceReportRequest;
 import com.auditlog.service.api.dto.ComplianceReportResponse;
 import com.auditlog.service.api.dto.QueryResponse;
@@ -150,5 +151,13 @@ public class AuditEventController {
         );
         ComplianceReportResponse response = complianceReportService.queryAccessReport(request);
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/compliance/access-report/bundle")
+    public ResponseEntity<tools.jackson.databind.JsonNode> generateComplianceBundle(
+        @RequestBody ComplianceBundleRequest request
+    ) {
+        tools.jackson.databind.JsonNode bundle = complianceReportService.generateSignedBundle(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(bundle);
     }
 }

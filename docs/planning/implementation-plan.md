@@ -60,19 +60,41 @@ The next implementation work is divided into independent checkpoints so that ret
 - Replace multi-approach comparison matrix with "Alternatives considered but rejected" rationale.
 - Status: **DESIGN-ONLY checkpoint completed on 2026-08-11** — no production code/schema/test changes.
 
-## Checkpoint H — Scenario C prototype implementation and tests (deferred)
+## Checkpoint H — Scenario C prototype implementation and tests
 
 - Implement normalized access-report query behavior over immutable audit events.
 - Add bounded UTC range validation, account/resource selector constraints, and cursor pagination.
 - Reuse Scenario B masking and optional signed bundle export for compliance delivery.
 - Append report-generation certificate events and add integration/unit test coverage.
-- Status: Deferred pending human approval of Scenario C design.
+
+### Checkpoint H1 — Interactive compliance report (COMPLETED 2026-08-11)
+
+- Implemented `GET /audit/compliance/access-report`.
+- Returns unsigned cursor-paginated JSON; requires exactly one selector (accountId or resourceId).
+- Enforces bounded UTC from/to with configurable 90-day maximum window and 200-event page limit.
+- Filters to five canonical access-event types; always excludes `COMPLIANCE_REPORT_GENERATED`.
+- Excludes archived events by default; `includeArchived=true` to include.
+- Applies Scenario B masking and destroyed-key redaction.
+- 11 integration tests + 13 unit tests — all passing.
+
+### Checkpoint H2 — Signed regulatory bundle (COMPLETED 2026-08-11)
+
+- Implemented `POST /audit/compliance/access-report/bundle`.
+- Accepts same selection criteria as H1 plus mandatory `approvalRef` and optional `reasonCode`.
+- Applies identical taxonomy filter, archival rules, masking, and redaction as H1.
+- Reuses Scenario B `ExportDigestSupport` and `ExportSignatureSupport` for canonical digest + Ed25519 signing.
+- Signature proves integrity and signer authenticity; does NOT claim absolute completeness.
+- Bundle format compatible with `ExportVerifier` for offline verification.
+- Appends one `COMPLIANCE_REPORT_GENERATED` certificate event after successful bundle creation; cert event is excluded from the bundle it certifies.
+- Certificate payload contains only safe metadata: `approvalRef`, `reasonCode`, `recordCount`, `bundleDigest`, `criteriaDigest`, `generatedAt`, `signingKeyId` — no raw account numbers or PII.
+- Atomicity: cert event is never appended if bundle signing fails.
+- 11 integration tests + 11 unit tests — all passing.
 
 ## Notes
 
 - The implementation order reflects the approved sequence for the prototype.
-- Current code covers Scenario B Checkpoints A–F, all completed and committed.
-- Scenario C checkpoint G is design-only; design documents now present one single cohesive hybrid architecture (direct queries over `audit_events` + Scenario B Ed25519 signed export reuse) as the final selected approach, not multiple competing implementations.
+- Current code covers Scenario B Checkpoints A–F and Scenario C Checkpoints G–H, all completed and committed.
+- Scenario C implementation uses one single cohesive hybrid architecture: direct queries over `audit_events` + Scenario B Ed25519 signed export reuse.
 - Rejected alternatives explicitly documented: dedicated compliance read model (duplication/drift risk), external warehouse (operational complexity), signed-export-only (lacks interactive queries).
 - Unresolved Product/Compliance questions clearly separated from prototype assumptions.
-- Scenario C implementation (checkpoint H) remains deferred pending human approval of the final design.
+

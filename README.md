@@ -131,7 +131,57 @@ For encrypted Scenario B records, successful reads return decrypted values while
 - Test results: See Maven Surefire reports under `target/surefire-reports/`
 - Live defense notes: TBD (Post-submission)
 
-## Export API
+## Compliance Reporting API (Scenario C)
+
+### GET /audit/compliance/access-report
+
+Returns an unsigned cursor-paginated JSON report of client account access events.
+
+**Required (exactly one):**
+- `accountId` — report for this account
+- `resourceId` — report for this resource
+
+**Required:**
+- `from` — ISO-8601 UTC start timestamp (inclusive)
+- `to` — ISO-8601 UTC end timestamp (exclusive); maximum window 90 days
+
+**Optional:**
+- `actorId`, `action`, `outcome` — additional filters
+- `includeArchived` — boolean, default `false`
+- `cursor`, `limit` — cursor pagination (default page size 50, max 200)
+
+**Event types returned:** `CLIENT_ACCOUNT_DATA_VIEWED`, `CLIENT_ACCOUNT_DATA_SEARCHED`, `CLIENT_ACCOUNT_DATA_EXPORTED`, `CLIENT_ACCOUNT_DATA_UPDATED`, `CLIENT_ACCOUNT_ACCESS_DENIED`. `COMPLIANCE_REPORT_GENERATED` certificate events are always excluded.
+
+**Error responses:** `400` — invalid selector, timestamp, or range.
+
+---
+
+### POST /audit/compliance/access-report/bundle
+
+Generates a signed regulatory access-report bundle. Applies the same event taxonomy, filtering, masking, and archival rules as the GET endpoint.
+
+**Request body (JSON):**
+
+| Field | Required | Description |
+|---|---|---|
+| `accountId` / `resourceId` | Exactly one | Selector |
+| `from` / `to` | Yes | UTC timestamps; max 90-day window |
+| `approvalRef` | Yes | Regulatory approval reference |
+| `actorId`, `action`, `outcome` | No | Optional filters |
+| `includeArchived` | No | Default `false` |
+| `reasonCode` | No | Reason code for audit trail |
+
+**Response (201 Created):** Signed JSON bundle with the same structure as `GET /audit/exports` plus `reportType: "COMPLIANCE_ACCESS_REPORT"`, compliance-specific selection metadata, `approvalRef`, and `signatureIntegrityNote`.
+
+**After successful bundle generation:** One `COMPLIANCE_REPORT_GENERATED` certificate event is appended to the audit chain. Its payload contains only safe metadata (`approvalRef`, `reasonCode`, `recordCount`, `bundleDigest`, `criteriaDigest`, `generatedAt`, `signingKeyId`). The certificate event is excluded from the bundle it certifies.
+
+**Signature:** Proves bundle integrity and signer authenticity. Does **not** independently prove absolute completeness of the audit record set.
+
+**Offline verification:** The returned bundle is compatible with `ExportVerifier` for offline signature verification.
+
+**Error responses:** `400` — missing `approvalRef`, invalid selector, or excessive timestamp range.
+
+---
 
 ### GET /audit/exports
 

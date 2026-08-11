@@ -389,3 +389,134 @@ Scope note:
 - No Scenario C design changes.
 - No production code modifications.
 - No commit or push performed (awaiting full test suite verification).
+
+## Entry: Scenario C Checkpoint H2 — Signed Regulatory Bundle Implementation
+
+Date: 2026-08-11
+
+Prompt summary:
+- Implement `POST /audit/compliance/access-report/bundle` for signed regulatory access-report delivery.
+- Accept JSON body with accountId/resourceId selector, from/to timestamps, required approvalRef, optional actorId/action/outcome/includeArchived/reasonCode.
+- Apply the same event taxonomy, validation, filtering, archival rules, and masking as H1 (GET endpoint).
+- Exclude COMPLIANCE_REPORT_GENERATED certificate events from bundle records.
+- Reuse Scenario B ExportDigestSupport, ExportSignatureSupport, CanonicalHashService, Ed25519 signing.
+- Return a signed JSON bundle compatible with ExportVerifier offline verification.
+- After successful bundle creation, append one COMPLIANCE_REPORT_GENERATED certificate event with safe metadata only.
+- Certificate event must not be included in the bundle it certifies.
+- Atomicity: do not append cert event if bundle/signing fails.
+- HTTP 400 for: missing approvalRef, invalid selector, excessive timestamp range.
+- 11 integration tests + 11 unit tests.
+- Do not commit or push; update README, implementation plan, and usage log.
+
+Accepted changes (H2 implementation):
+
+**New DTO:**
+- `ComplianceBundleRequest` — POST request body record: accountId/resourceId, from, to, approvalRef (required), actorId, action, outcome, includeArchived, reasonCode.
+
+**Updated ComplianceReportService (H2 additions):**
+- Changed to use two constructors:
+  - 3-arg backward-compatible constructor (null H2 deps) — used by H1-only tests and RetentionControllerIntegrationTest.
+  - 7-arg `@Autowired` constructor (all deps including AuditEventService, CanonicalHashService, ExportProperties, Clock) — used by Spring and H2 tests.
+- `generateSignedBundle()` — main H2 entry point:
+  - Validates approvalRef (required, non-blank).
+  - Validates selector (exactly one: accountId or resourceId).
+  - Validates and normalizes timestamps; enforces max UTC window.
+  - Queries full bounded snapshot (no cursor) of matching events via repository.findWithFilters().
+  - Applies taxonomy filter and excludes COMPLIANCE_REPORT_GENERATED.
+  - Applies optional action/outcome filters.
+  - Applies Scenario B masking and destroyed-key redaction.
+  - Builds canonical record array (identical format to ExportService for ExportVerifier compatibility).
+  - Computes recordsDigest and bundleDigest via ExportDigestSupport (package-private, same service package).
+  - Signs bundleDigest with Ed25519 via ExportSignatureSupport.
+  - Computes criteriaDigest (SHA-256 of canonical selection criteria, no PII).
+  - Appends COMPLIANCE_REPORT_GENERATED certificate event via AuditEventService.createEvent().
+  - Returns bundle only after cert event is appended; if cert append fails, bundle is not returned.
+- `buildBundleSelectionNode()` — includes reportType, selectorType, selectorValue, timestamps, optional filters, approvalRef, reasonCode, and signatureIntegrityNote.
+- `buildBundleRecordNode()` / `buildBundleExportPayload()` — replicates ExportService record format exactly for verifier compatibility; handles REDACTION_APPLIED sanitization.
+- `buildBundleSignatureNode()` — delegates to ExportSignatureSupport.signDigestToBase64().
+- `computeCriteriaDigest()` — SHA-256 of canonical selection criteria object; no account data stored.
+- `appendComplianceCertificateEvent()` — cert payload: approvalRef, reasonCode, recordCount, bundleDigest, criteriaDigest, generatedAt, signingKeyId. No raw account numbers or private keys.
+
+**Updated AuditEventController:**
+- Added import for ComplianceBundleRequest.
+- Added `POST /audit/compliance/access-report/bundle` endpoint returning 201 Created.
+
+**Updated README.md:**
+- Added Compliance Reporting API section before Export API section.
+- Documents GET and POST endpoints, request/response contract, signature semantics, cert event behavior.
+
+**Updated docs/planning/implementation-plan.md:**
+- Marked Checkpoint H1 as COMPLETED.
+- Marked Checkpoint H2 as COMPLETED.
+- Updated notes to reflect both H checkpoints completed.
+
+**New integration tests (ComplianceBundleControllerIntegrationTest):**
+11 tests covering:
+1. Successful signed bundle with correct structure.
+2. Offline ExportVerifier signature verification passes.
+3. Tampered bundle causes recordsDigest mismatch (verification fails).
+4. Deterministic recordsDigest: identical inputs produce same digest.
+5. COMPLIANCE_REPORT_GENERATED cert events excluded from bundle records.
+6. Cert event appended to audit_events with safe metadata only.
+7. Archived events excluded by default; included when includeArchived=true.
+8. Masked events don't break signature verification.
+9. Missing approvalRef returns HTTP 400.
+10. Both selectors returns HTTP 400.
+11. Neither selector, excessive time window, invalid timestamp order return HTTP 400.
+
+**New unit tests (ComplianceBundleServiceTest):**
+11 tests covering:
+1. Missing approvalRef rejected.
+2. Blank approvalRef rejected.
+3. Both selectors rejected.
+4. Neither selector rejected.
+5. Missing from timestamp rejected.
+6. Invalid timestamp range (from >= to) rejected.
+7. Excessive UTC window rejected.
+8. COMPLIANCE_REPORT_GENERATED events excluded before masking.
+9. Non-taxonomy event types excluded.
+10. Cert event appended exactly once on success.
+11. Cert event NOT appended when bundle creation fails (atomicity).
+12. 3-arg constructor throws IllegalStateException if generateSignedBundle is called.
+
+Files changed:
+1. `src/main/java/com/auditlog/service/api/dto/ComplianceBundleRequest.java` (NEW)
+2. `src/main/java/com/auditlog/service/service/ComplianceReportService.java` (MODIFIED — added H2 constructor + bundle generation)
+3. `src/main/java/com/auditlog/service/api/AuditEventController.java` (MODIFIED — added POST endpoint)
+4. `src/test/java/com/auditlog/service/integration/ComplianceBundleControllerIntegrationTest.java` (NEW)
+5. `src/test/java/com/auditlog/service/service/ComplianceBundleServiceTest.java` (NEW)
+6. `docs/planning/implementation-plan.md` (UPDATED — H1/H2 marked completed)
+7. `README.md` (UPDATED — Compliance Reporting API section added)
+8. `docs/ai/usage-log.md` (this entry)
+
+Design decisions and assumptions:
+- Bundle record format is identical to ExportService's format so ExportVerifier can verify compliance bundles without modification.
+- ExportDigestSupport (package-private) is accessible because ComplianceReportService is in the same package.
+- The certificate event's resourceType is "COMPLIANCE_REPORT" (not "CLIENT_ACCOUNT") to avoid ambiguity with access events.
+- The certificate event's actorId is "system:compliance-report-service" — a system actor.
+- criteriaDigest is computed over a canonical JSON of selection criteria (excluding approvalRef) so the cert event anchors the exact filter parameters without storing PII.
+- approvalRef is stored as the cert event's resourceId for linking.
+- Bundle selection node includes signatureIntegrityNote to make the completeness limitation explicit in the signed payload.
+- 3-arg backward-compatible constructor leaves H2 fields null; generateSignedBundle() throws IllegalStateException to fail fast if called incorrectly.
+
+Prototype limitations (H2 checkpoint):
+- No full authentication/authorization enforcement (deferred to production).
+- The 90-day max UTC window applies to bundles as well as interactive queries.
+- Bundle max record count is bounded by exportProperties.maxRecords (default 10,000).
+- No streaming; large bundles are built fully in memory.
+- Completeness guarantee not provided by the signature alone; independently anchored checkpoints deferred.
+
+Rejected approaches:
+- Calling ExportService.export() directly: rejected because ExportService uses different selector semantics and does not apply the access-event taxonomy filter.
+- Making ExportDigestSupport public: rejected because it's package-private by design and ComplianceReportService is in the same package.
+
+Next steps:
+- Run full test suite: `.\mvnw.cmd clean test`
+- Human review of H2 implementation.
+- If approved, commit and push H1+H2 together.
+
+Scope note:
+- This entry covers Scenario C Checkpoint H2 implementation only.
+- No Scenario A/B code modified; backward compatibility maintained.
+- No schema changes.
+- No commit or push performed (awaiting human review).
