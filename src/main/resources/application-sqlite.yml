@@ -1,13 +1,21 @@
 spring:
-  profiles: sqlite
+  config:
+    activate:
+      on-profile: sqlite
   datasource:
-    url: ${AUDIT_DB_URL:jdbc:sqlite:./data/audit-db.db}
+    url: ${AUDIT_DB_URL:jdbc:sqlite:./data/audit-log.db}
     driver-class-name: org.sqlite.JDBC
     hikari:
-      maximum-pool-size: 1
+      maximum-pool-size: 2
+      minimum-idle: 1
+      connection-timeout: 30000
+      idle-timeout: 600000
   sql:
     init:
       mode: always
 
-# SQLite-specific schema (executed when sqlite profile is active)
-# Place schema file as schema-sqlite.sql in src/main/resources if needed
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

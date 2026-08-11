@@ -5,4 +5,6 @@ CREATE TABLE IF NOT EXISTS schema_metadata (
     created_at TEXT NOT NULL
 );
 
-INSERT OR IGNORE INTO schema_metadata (schema_key, schema_value, created_at) VALUES ('version', 'v1-scaffold', datetime('now'));
+INSERT INTO schema_metadata (schema_key, schema_value, created_at)
+SELECT 'version', 'v1-scaffold', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM schema_metadata WHERE schema_key = 'version');
