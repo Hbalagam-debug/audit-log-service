@@ -20,6 +20,7 @@ public class DatabaseSchemaInitializer {
         ensureAuditEventsColumns();
         ensureRetentionRunsTable();
         ensureAuditEventRedactionsTable();
+        ensureAuditEventEncryptionKeysTable();
         ensureAuditEventIndexes();
     }
 
@@ -76,6 +77,28 @@ public class DatabaseSchemaInitializer {
             """);
     }
 
+    private void ensureAuditEventEncryptionKeysTable() {
+        jdbcTemplate.execute("""
+            CREATE TABLE IF NOT EXISTS audit_event_encryption_keys (
+                key_ref TEXT PRIMARY KEY,
+                event_id TEXT NOT NULL,
+                encrypted_pointers_json TEXT NOT NULL,
+                wrap_algorithm TEXT NOT NULL,
+                wrapped_dek TEXT,
+                wrap_nonce TEXT,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                destroyed_at TEXT,
+                destroyed_by TEXT,
+                destruction_reason TEXT,
+                approval_ref TEXT,
+                destruction_certificate_event_id TEXT,
+                encryption_version TEXT NOT NULL,
+                FOREIGN KEY (event_id) REFERENCES audit_events(id)
+            )
+            """);
+    }
+
     private void ensureAuditEventIndexes() {
         createIndexIfMissing("idx_is_archived", "CREATE INDEX IF NOT EXISTS idx_is_archived ON audit_events(is_archived)");
         createIndexIfMissing("idx_archived_at", "CREATE INDEX IF NOT EXISTS idx_archived_at ON audit_events(archived_at)");
@@ -84,6 +107,7 @@ public class DatabaseSchemaInitializer {
         createIndexIfMissing("idx_retention_run_started_at", "CREATE INDEX IF NOT EXISTS idx_retention_run_started_at ON retention_runs(started_at)");
         createIndexIfMissing("idx_redaction_event_id", "CREATE INDEX IF NOT EXISTS idx_redaction_event_id ON audit_event_redactions(event_id)");
         createIndexIfMissing("idx_redaction_event_pointer", "CREATE INDEX IF NOT EXISTS idx_redaction_event_pointer ON audit_event_redactions(event_id, json_pointer)");
+        createIndexIfMissing("idx_encryption_key_event_id", "CREATE INDEX IF NOT EXISTS idx_encryption_key_event_id ON audit_event_encryption_keys(event_id)");
     }
 
     private boolean tableExists(String tableName) {

@@ -2,6 +2,7 @@ package com.auditlog.service.service;
 
 import com.auditlog.service.api.dto.AuditEventCreateRequest;
 import com.auditlog.service.domain.AuditEvent;
+import com.auditlog.service.domain.AuditEventEncryptionKey;
 import com.auditlog.service.repository.AuditEventRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -16,17 +17,28 @@ public class AuditEventService {
     private final AuditEventRepository repository;
     private final CanonicalHashService hashService;
     private final Clock clock;
+    private final PayloadEncryptionService payloadEncryptionService;
     private final Object writeLock = new Object();
 
     public AuditEventService(AuditEventRepository repository, CanonicalHashService hashService) {
-        this(repository, hashService, Clock.systemUTC());
+        this(repository, hashService, Clock.systemUTC(), PayloadEncryptionService.disabled());
+    }
+
+    public AuditEventService(AuditEventRepository repository, CanonicalHashService hashService, Clock clock) {
+        this(repository, hashService, clock, PayloadEncryptionService.disabled());
     }
 
     @Autowired
-    public AuditEventService(AuditEventRepository repository, CanonicalHashService hashService, Clock clock) {
+    public AuditEventService(
+        AuditEventRepository repository,
+        CanonicalHashService hashService,
+        Clock clock,
+        PayloadEncryptionService payloadEncryptionService
+    ) {
         this.repository = repository;
         this.hashService = hashService;
         this.clock = clock;
+        this.payloadEncryptionService = payloadEncryptionService;
     }
 
     @Transactional(isolation = Isolation.SERIALIZABLE)
@@ -37,6 +49,8 @@ public class AuditEventService {
             String id = UUID.randomUUID().toString();
             String normalizedTimestamp = TimestampNormalizer.normalizeToUtcString(request.getTimestamp(), clock);
             String ingestedAt = TimestampNormalizer.nowUtcString(clock);
+            PayloadEncryptionService.EncryptionWriteResult encryptionWriteResult =
+                payloadEncryptionService.encryptPayloadForStorage(id, request.getPayload());
 
             long chainPosition = repository.findMaxChainPosition().orElse(0L) + 1;
             String previousHash = chainPosition == 1 ? hashService.getGenesisHash() : 
@@ -49,7 +63,7 @@ public class AuditEventService {
                 request.getActorId(),
                 request.getResourceType(),
                 request.getResourceId(),
-                request.getPayload(),
+                encryptionWriteResult.payload(),
                 normalizedTimestamp
             );
 
@@ -62,7 +76,7 @@ public class AuditEventService {
                 request.getActorId(),
                 request.getResourceType(),
                 request.getResourceId(),
-                request.getPayload(),
+                encryptionWriteResult.payload(),
                 normalizedTimestamp,
                 ingestedAt,
                 contentHash,
@@ -72,6 +86,9 @@ public class AuditEventService {
             );
 
             repository.insert(event);
+            for (AuditEventEncryptionKey keyRecord : encryptionWriteResult.keyRecords()) {
+                repository.insertEncryptionKey(keyRecord);
+            }
             return event;
         }
     }

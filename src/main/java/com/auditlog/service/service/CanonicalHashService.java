@@ -49,6 +49,10 @@ public class CanonicalHashService {
         return HASH_VERSION;
     }
 
+    public String canonicalizeValue(JsonNode node) {
+        return canonicalizeJson(node);
+    }
+
     private String sha256Hex(String input) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");

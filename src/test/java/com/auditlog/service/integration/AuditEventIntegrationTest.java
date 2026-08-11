@@ -1,5 +1,6 @@
 package com.auditlog.service.integration;
 
+import com.auditlog.service.SpringBootTestSupport;
 import com.auditlog.service.api.dto.AuditEventCreateRequest;
 import com.auditlog.service.api.dto.QueryResponse;
 import com.auditlog.service.api.dto.VerificationResultResponse;
@@ -25,7 +26,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @ActiveProfiles("test")
 @DisplayName("AuditEventController - REST API Integration Tests")
-class AuditEventIntegrationTest {
+class AuditEventIntegrationTest extends SpringBootTestSupport {
     @Autowired
     private WebApplicationContext wac;
 

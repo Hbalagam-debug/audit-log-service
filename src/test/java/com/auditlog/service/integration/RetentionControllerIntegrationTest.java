@@ -15,6 +15,7 @@ import com.auditlog.service.service.CanonicalHashService;
 import com.auditlog.service.service.ChainVerificationService;
 import com.auditlog.service.service.QueryService;
 import com.auditlog.service.service.RedactionService;
+import com.auditlog.service.service.RedactionViewService;
 import com.auditlog.service.service.RetentionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -87,12 +88,14 @@ class RetentionControllerIntegrationTest {
         ChainVerificationService verificationService = new ChainVerificationService(auditEventRepository, canonicalHashService);
         RedactionProperties redactionProperties = new RedactionProperties();
         RedactionService redactionService = new RedactionService(auditEventRepository, auditEventService, redactionProperties, fixedClock);
+        RedactionViewService redactionViewService = new RedactionViewService(auditEventRepository, redactionProperties);
         AuditEventController controller = new AuditEventController(
             auditEventService,
             queryService,
             verificationService,
             retentionService,
-            redactionService
+            redactionService,
+            redactionViewService
         );
 
         this.mockMvc = MockMvcBuilders.standaloneSetup(controller)

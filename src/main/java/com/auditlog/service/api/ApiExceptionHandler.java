@@ -2,6 +2,7 @@ package com.auditlog.service.api;
 
 import com.auditlog.service.api.dto.ErrorResponse;
 import com.auditlog.service.service.InvalidCursorException;
+import com.auditlog.service.service.PayloadDecryptionException;
 import com.auditlog.service.service.ResourceNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -88,6 +89,17 @@ public class ApiExceptionHandler {
         );
 
         return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
+    }
+
+    @ExceptionHandler(PayloadDecryptionException.class)
+    public ResponseEntity<ErrorResponse> handlePayloadDecryptionException(WebRequest request) {
+        ErrorResponse response = new ErrorResponse(
+            HttpStatus.INTERNAL_SERVER_ERROR.value(),
+            "ENCRYPTED_PAYLOAD_UNAVAILABLE",
+            "Encrypted payload is unavailable for one or more events",
+            request.getDescription(false).replace("uri=", "")
+        );
+        return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     @ExceptionHandler(RuntimeException.class)

@@ -1,5 +1,6 @@
 package com.auditlog.service.integration;
 
+import com.auditlog.service.SpringBootTestSupport;
 import com.auditlog.service.api.dto.AuditEventCreateRequest;
 import com.auditlog.service.api.dto.QueryResponse;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,7 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @ActiveProfiles("test")
 @DisplayName("RedactionController - Integration Tests")
-class RedactionControllerIntegrationTest {
+class RedactionControllerIntegrationTest extends SpringBootTestSupport {
     @Autowired
     private WebApplicationContext wac;
 

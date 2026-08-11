@@ -12,7 +12,7 @@ import java.nio.file.Path;
 
 @SpringBootTest
 @ActiveProfiles("test")
-class AuditLogServiceApplicationTests {
+class AuditLogServiceApplicationTests extends SpringBootTestSupport {
     private static final Path tempDir = createTempDir();
 
     @DynamicPropertySource

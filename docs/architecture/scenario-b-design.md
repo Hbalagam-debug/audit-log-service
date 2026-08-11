@@ -1,8 +1,8 @@
 ﻿# Scenario B Design (Step 4) — Retention, Structured Redaction, Verifiable Bulk Export
 
-Status: Proposed
+Status: Partially implemented
 Human sign-off required: Yes
-Implementation scope: Documentation only; no Java, SQL schema, configuration, or tests to be created in this update.
+Implementation scope: Checkpoints A-C are now implemented in the prototype codebase; export checkpoints remain pending.
 
 ## Final recommendation for the prototype
 
@@ -74,6 +74,14 @@ New Scenario B records use encryption-at-write rather than overlay-only redactio
 - A REDACTION_APPLIED event is appended with the target event ID, JSON pointers, reasonCode, approvalRef, and non-sensitive key-destruction evidence.
 - Plaintext values, encryption keys, and unsalted sensitive-value hashes are never placed in the certificate event.
 - Query and export responses render inaccessible values as [REDACTED].
+
+Implementation status for this checkpoint:
+
+- Checkpoint C is implemented for the local prototype.
+- Configured payload pointers are encrypted before `payload_json` is stored.
+- The stored `contentHash` and `chainHash` continue to cover the encrypted representation.
+- Redaction for encrypted pointers destroys local wrapped-DEK access and appends a `REDACTION_APPLIED` certificate event without rewriting historical payload rows.
+- Legacy plaintext records still rely on presentation masking from Checkpoint B and are not migrated in this checkpoint.
 
 ### 2.3 Local prototype key management
 
@@ -161,9 +169,9 @@ F. Complete integration tests and documentation
 
 ## 8. Human approval status
 
-- Status: Proposed
-- Human sign-off required before implementation begins
-- This document is the design baseline for the next implementation phase only after human review is complete
+- Status: Partially implemented in code; broader Scenario B review still required
+- Human sign-off remains required before treating the remaining export work as complete
+- This document remains the design baseline for the unfinished Scenario B checkpoints
 
 ## 9. Summary for the human review
 

@@ -65,6 +65,24 @@ CREATE TABLE IF NOT EXISTS audit_event_redactions (
     FOREIGN KEY (event_id) REFERENCES audit_events(id)
 );
 
+CREATE TABLE IF NOT EXISTS audit_event_encryption_keys (
+    key_ref TEXT PRIMARY KEY,
+    event_id TEXT NOT NULL,
+    encrypted_pointers_json TEXT NOT NULL,
+    wrap_algorithm TEXT NOT NULL,
+    wrapped_dek TEXT,
+    wrap_nonce TEXT,
+    status TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    destroyed_at TEXT,
+    destroyed_by TEXT,
+    destruction_reason TEXT,
+    approval_ref TEXT,
+    destruction_certificate_event_id TEXT,
+    encryption_version TEXT NOT NULL,
+    FOREIGN KEY (event_id) REFERENCES audit_events(id)
+);
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_chain_position ON audit_events(chain_position);
 CREATE INDEX IF NOT EXISTS idx_actor_id ON audit_events(actor_id);
 CREATE INDEX IF NOT EXISTS idx_resource_type ON audit_events(resource_type);
@@ -75,3 +93,4 @@ CREATE INDEX IF NOT EXISTS idx_retention_runs_status ON retention_runs(status);
 CREATE INDEX IF NOT EXISTS idx_retention_runs_started_at ON retention_runs(started_at);
 CREATE INDEX IF NOT EXISTS idx_redaction_event_id ON audit_event_redactions(event_id);
 CREATE INDEX IF NOT EXISTS idx_redaction_event_pointer ON audit_event_redactions(event_id, json_pointer);
+CREATE INDEX IF NOT EXISTS idx_encryption_key_event_id ON audit_event_encryption_keys(event_id);

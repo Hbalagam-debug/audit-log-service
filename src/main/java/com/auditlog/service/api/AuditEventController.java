@@ -13,6 +13,7 @@ import com.auditlog.service.service.AuditEventService;
 import com.auditlog.service.service.ChainVerificationService;
 import com.auditlog.service.service.QueryService;
 import com.auditlog.service.service.RedactionService;
+import com.auditlog.service.service.RedactionViewService;
 import com.auditlog.service.service.RetentionService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -27,25 +28,28 @@ public class AuditEventController {
     private final ChainVerificationService verificationService;
     private final RetentionService retentionService;
     private final RedactionService redactionService;
+    private final RedactionViewService redactionViewService;
 
     public AuditEventController(
         AuditEventService auditEventService,
         QueryService queryService,
         ChainVerificationService verificationService,
         RetentionService retentionService,
-        RedactionService redactionService
+        RedactionService redactionService,
+        RedactionViewService redactionViewService
     ) {
         this.auditEventService = auditEventService;
         this.queryService = queryService;
         this.verificationService = verificationService;
         this.retentionService = retentionService;
         this.redactionService = redactionService;
+        this.redactionViewService = redactionViewService;
     }
 
     @PostMapping("/events")
     public ResponseEntity<AuditEventResponse> createEvent(@Valid @RequestBody AuditEventCreateRequest request) {
         AuditEvent event = auditEventService.createEvent(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(AuditEventResponse.fromDomain(event));
+        return ResponseEntity.status(HttpStatus.CREATED).body(redactionViewService.maskEvent(event));
     }
 
     @GetMapping("/events")

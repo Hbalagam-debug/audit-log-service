@@ -1,12 +1,14 @@
 package com.auditlog.service.repository;
 
 import com.auditlog.service.domain.AuditEvent;
+import com.auditlog.service.domain.AuditEventEncryptionKey;
 import com.auditlog.service.domain.RedactionOverlay;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
@@ -57,6 +59,31 @@ public class AuditEventRepository {
         rs.getString("certificate_event_id"),
         rs.getBoolean("active")
     );
+
+    private final RowMapper<AuditEventEncryptionKey> encryptionKeyRowMapper = (rs, rowNum) -> {
+        try {
+            List<String> encryptedPointers = objectMapper.readerForListOf(String.class)
+                .readValue(rs.getString("encrypted_pointers_json"));
+            return new AuditEventEncryptionKey(
+                rs.getString("key_ref"),
+                rs.getString("event_id"),
+                encryptedPointers,
+                rs.getString("wrap_algorithm"),
+                rs.getString("wrapped_dek"),
+                rs.getString("wrap_nonce"),
+                rs.getString("status"),
+                rs.getString("created_at"),
+                rs.getString("destroyed_at"),
+                rs.getString("destroyed_by"),
+                rs.getString("destruction_reason"),
+                rs.getString("approval_ref"),
+                rs.getString("destruction_certificate_event_id"),
+                rs.getString("encryption_version")
+            );
+        } catch (Exception ex) {
+            throw new RuntimeException("Failed to map row to AuditEventEncryptionKey", ex);
+        }
+    };
 
     public void insert(AuditEvent event) {
         String sql = "INSERT INTO audit_events " +
@@ -270,6 +297,75 @@ public class AuditEventRepository {
                 eventId,
                 pointer
             );
+        }
+    }
+
+    public void insertEncryptionKey(AuditEventEncryptionKey encryptionKey) {
+        String sql = "INSERT INTO audit_event_encryption_keys " +
+            "(key_ref, event_id, encrypted_pointers_json, wrap_algorithm, wrapped_dek, wrap_nonce, status, created_at, destroyed_at, destroyed_by, destruction_reason, approval_ref, destruction_certificate_event_id, encryption_version) " +
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        jdbcTemplate.update(
+            sql,
+            encryptionKey.getKeyRef(),
+            encryptionKey.getEventId(),
+            writePointersJson(encryptionKey.getEncryptedPointers()),
+            encryptionKey.getWrapAlgorithm(),
+            encryptionKey.getWrappedDek(),
+            encryptionKey.getWrapNonce(),
+            encryptionKey.getStatus(),
+            encryptionKey.getCreatedAt(),
+            encryptionKey.getDestroyedAt(),
+            encryptionKey.getDestroyedBy(),
+            encryptionKey.getDestructionReason(),
+            encryptionKey.getApprovalRef(),
+            encryptionKey.getDestructionCertificateEventId(),
+            encryptionKey.getEncryptionVersion()
+        );
+    }
+
+    public List<AuditEventEncryptionKey> findEncryptionKeysForEventId(String eventId) {
+        String sql = "SELECT * FROM audit_event_encryption_keys WHERE event_id = ? ORDER BY key_ref ASC";
+        return jdbcTemplate.query(sql, encryptionKeyRowMapper, eventId);
+    }
+
+    public List<AuditEventEncryptionKey> findEncryptionKeysForEventIds(List<String> eventIds) {
+        if (eventIds == null || eventIds.isEmpty()) {
+            return List.of();
+        }
+        String placeholders = eventIds.stream().map(id -> "?").collect(Collectors.joining(","));
+        String sql = "SELECT * FROM audit_event_encryption_keys WHERE event_id IN (" + placeholders + ") ORDER BY event_id, key_ref ASC";
+        return jdbcTemplate.query(sql, encryptionKeyRowMapper, eventIds.toArray());
+    }
+
+    public void destroyEncryptionKey(
+        String keyRef,
+        String destroyedAt,
+        String destroyedBy,
+        String destructionReason,
+        String approvalRef,
+        String destructionCertificateEventId
+    ) {
+        jdbcTemplate.update(
+            "UPDATE audit_event_encryption_keys SET status = 'DESTROYED', wrapped_dek = NULL, wrap_nonce = NULL, destroyed_at = ?, destroyed_by = ?, destruction_reason = ?, approval_ref = ?, destruction_certificate_event_id = ? WHERE key_ref = ?",
+            destroyedAt,
+            destroyedBy,
+            destructionReason,
+            approvalRef,
+            destructionCertificateEventId,
+            keyRef
+        );
+    }
+
+    public List<AuditEventEncryptionKey> findDestroyedEncryptionKeysForEventId(String eventId) {
+        String sql = "SELECT * FROM audit_event_encryption_keys WHERE event_id = ? AND status = 'DESTROYED' ORDER BY key_ref ASC";
+        return jdbcTemplate.query(sql, encryptionKeyRowMapper, eventId);
+    }
+
+    private String writePointersJson(List<String> pointers) {
+        try {
+            return objectMapper.writeValueAsString(pointers);
+        } catch (Exception ex) {
+            throw new RuntimeException("Failed to serialize encryption pointers", ex);
         }
     }
 }

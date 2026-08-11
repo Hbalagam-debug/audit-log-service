@@ -3,30 +3,39 @@ package com.auditlog.service.service;
 import com.auditlog.service.api.dto.AuditEventResponse;
 import com.auditlog.service.config.RedactionProperties;
 import com.auditlog.service.domain.AuditEvent;
+import com.auditlog.service.domain.AuditEventEncryptionKey;
 import com.auditlog.service.domain.RedactionOverlay;
 import com.auditlog.service.repository.AuditEventRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.json.JsonMapper;
-import tools.jackson.databind.node.ObjectNode;
-import tools.jackson.databind.node.ArrayNode;
 
 @Service
 public class RedactionViewService {
     private final AuditEventRepository repository;
     private final RedactionProperties redactionProperties;
-    private final ObjectMapper objectMapper = JsonMapper.builder().build();
+    private final PayloadEncryptionService payloadEncryptionService;
 
     public RedactionViewService(AuditEventRepository repository, RedactionProperties redactionProperties) {
+        this(repository, redactionProperties, PayloadEncryptionService.disabled());
+    }
+
+    @Autowired
+    public RedactionViewService(
+        AuditEventRepository repository,
+        RedactionProperties redactionProperties,
+        PayloadEncryptionService payloadEncryptionService
+    ) {
         this.repository = repository;
         this.redactionProperties = redactionProperties;
+        this.payloadEncryptionService = payloadEncryptionService;
     }
 
     public List<AuditEventResponse> maskEvents(List<AuditEvent> events) {
@@ -36,13 +45,21 @@ public class RedactionViewService {
 
         List<String> eventIds = events.stream().map(AuditEvent::getId).toList();
         List<RedactionOverlay> overlays = repository.findActiveOverlaysForEventIds(eventIds);
+        List<AuditEventEncryptionKey> encryptionKeys = repository.findEncryptionKeysForEventIds(eventIds);
         Map<String, List<RedactionOverlay>> overlaysByEvent = overlays.stream()
             .collect(Collectors.groupingBy(RedactionOverlay::getEventId, LinkedHashMap::new, Collectors.toList()));
+        Map<String, List<AuditEventEncryptionKey>> encryptionKeysByEvent = encryptionKeys.stream()
+            .collect(Collectors.groupingBy(AuditEventEncryptionKey::getEventId, LinkedHashMap::new, Collectors.toList()));
 
         List<AuditEventResponse> responses = new ArrayList<>();
         for (AuditEvent event : events) {
             List<RedactionOverlay> eventOverlays = overlaysByEvent.getOrDefault(event.getId(), List.of());
-            JsonNode maskedPayload = event.getPayload().deepCopy();
+            PayloadEncryptionService.PayloadViewResult payloadViewResult = payloadEncryptionService.renderPayloadForResponse(
+                event,
+                encryptionKeysByEvent.getOrDefault(event.getId(), List.of()),
+                redactionProperties.getMaskValue()
+            );
+            JsonNode maskedPayload = payloadViewResult.payload();
             List<String> pointerList = eventOverlays.stream()
                 .map(RedactionOverlay::getJsonPointer)
                 .distinct()
@@ -51,91 +68,23 @@ public class RedactionViewService {
             for (String pointer : pointerList) {
                 applyMask(maskedPayload, pointer);
             }
-            boolean redacted = !pointerList.isEmpty();
-            responses.add(AuditEventResponse.fromDomain(event, maskedPayload, redacted ? pointerList : List.of()));
+            List<String> redactedPointers = new ArrayList<>(payloadViewResult.destroyedPointers());
+            redactedPointers.addAll(pointerList);
+            List<String> mergedPointers = new ArrayList<>(new LinkedHashSet<>(redactedPointers)).stream().sorted().toList();
+            responses.add(AuditEventResponse.fromDomain(event, maskedPayload, mergedPointers));
         }
         return responses;
     }
 
-    private void applyMask(JsonNode root, String pointer) {
-        List<String> tokens = parsePointer(pointer);
-        JsonNode current = root;
-        for (int i = 0; i < tokens.size(); i++) {
-            String token = tokens.get(i);
-            if (current == null || current.isMissingNode()) {
-                return;
-            }
-            if (i == tokens.size() - 1) {
-                if (current.isObject()) {
-                    if (current.has(token)) {
-                        ((ObjectNode) current).put(token, redactionProperties.getMaskValue());
-                    }
-                } else if (current.isArray()) {
-                    try {
-                        int index = Integer.parseInt(token);
-                        if (index >= 0 && index < current.size()) {
-                            ((ArrayNode) current).set(index, objectMapper.getNodeFactory().textNode(redactionProperties.getMaskValue()));
-                        }
-                    } catch (NumberFormatException ignored) {
-                        // Ignore invalid array tokens.
-                    }
-                }
-                return;
-            }
-            if (current.isObject()) {
-                if (!current.has(token)) {
-                    return;
-                }
-                current = current.get(token);
-            } else if (current.isArray()) {
-                try {
-                    int index = Integer.parseInt(token);
-                    if (index < 0 || index >= current.size()) {
-                        return;
-                    }
-                    current = current.get(index);
-                } catch (NumberFormatException e) {
-                    return;
-                }
-            } else {
-                return;
-            }
-        }
+    public AuditEventResponse maskEvent(AuditEvent event) {
+        return maskEvents(List.of(event)).get(0);
     }
 
-    private List<String> parsePointer(String pointer) {
-        if (pointer == null || pointer.isBlank()) {
-            return List.of();
+    private void applyMask(JsonNode root, String pointer) {
+        JsonNode existing = JsonPointerUtils.getNode(root, pointer);
+        if (existing == null) {
+            return;
         }
-        List<String> tokens = new ArrayList<>();
-        String remainder = pointer.startsWith("/") ? pointer.substring(1) : pointer;
-        if (remainder.isEmpty()) {
-            return tokens;
-        }
-        String[] segments = remainder.split("/");
-        for (String segment : segments) {
-            StringBuilder token = new StringBuilder();
-            for (int i = 0; i < segment.length(); i++) {
-                char ch = segment.charAt(i);
-                if (ch == '~') {
-                    if (i + 1 >= segment.length()) {
-                        throw new IllegalArgumentException("Invalid escape sequence in pointer: " + pointer);
-                    }
-                    char next = segment.charAt(i + 1);
-                    if (next == '0') {
-                        token.append('~');
-                    } else if (next == '1') {
-                        token.append('/');
-                    } else {
-                        throw new IllegalArgumentException("Invalid escape sequence in pointer: " + pointer);
-                    }
-                    i++;
-                } else {
-                    token.append(ch);
-                }
-            }
-            tokens.add(token.toString());
-        }
-        return tokens;
+        JsonPointerUtils.setValue(root, pointer, tools.jackson.databind.node.JsonNodeFactory.instance.textNode(redactionProperties.getMaskValue()));
     }
 }

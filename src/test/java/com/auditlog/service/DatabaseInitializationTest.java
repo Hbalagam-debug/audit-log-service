@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(properties = "spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration")
 @EnableAutoConfiguration(excludeName = {"org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration"})
 @ActiveProfiles("test")
-class DatabaseInitializationTest {
+class DatabaseInitializationTest extends SpringBootTestSupport {
     @Autowired
     ResourceLoader resourceLoader;
 

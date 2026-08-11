@@ -15,3 +15,8 @@ audit:
     require-approval: true
     mask-value: '[REDACTED]'
     allow-list: /ipAddress,/deviceId,/device/id,/accountNumber,/personalIdentifier
+  encryption:
+    enabled: true
+    format-version: enc-v1
+    algorithm: AES-256-GCM
+    sensitive-pointers: /accountNumber,/personalIdentifier

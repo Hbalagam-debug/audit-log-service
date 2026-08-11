@@ -1,5 +1,6 @@
 package com.auditlog.service.integration;
 
+import com.auditlog.service.SpringBootTestSupport;
 import com.auditlog.service.repository.AuditEventRepository;
 import com.auditlog.service.service.CanonicalHashService;
 import com.auditlog.service.service.ChainVerificationService;
@@ -21,7 +22,7 @@ import tools.jackson.databind.json.JsonMapper;
 @SpringBootTest
 @ActiveProfiles("test")
 @DisplayName("TamperingDetectionTest - Direct Database Tampering Detection")
-class TamperingDetectionTest {
+class TamperingDetectionTest extends SpringBootTestSupport {
     @Autowired
     private ChainVerificationService verificationService;
 

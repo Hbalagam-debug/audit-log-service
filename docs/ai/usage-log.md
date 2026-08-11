@@ -46,3 +46,34 @@ Accepted fixes:
 Rejected suggestions:
 - Rejected hiding `RETENTION_RUN_EXECUTED` from default queries just to make the test pass, because certificate events are valid non-archived audit events and the API contract does not exclude them.
 - Rejected weakening or removing the failing assertions, skipping tests, or inserting certificate rows directly from the test, because those would mask production behavior instead of verifying it.
+
+## Entry: Scenario B checkpoint 3 encryption-at-write and key-destruction implementation
+
+Date: 2026-08-11
+
+Prompt summary:
+- Implement only Scenario B Checkpoint 3.
+- Encrypt configured sensitive payload pointers for new records before persistence.
+- Preserve legacy overlay masking for historical plaintext rows.
+- Destroy or disable access to wrapped DEKs on encrypted redaction, append `REDACTION_APPLIED`, and keep `payload_json` plus historical hashes immutable.
+- Update tests and documentation, but do not add export, external KMS, authentication, or data rewriting.
+
+Accepted changes:
+- Added typed encryption configuration with fail-fast validation for version, algorithm, pointer syntax, overlapping pointers, and required master-key presence.
+- Added a shared RFC 6901 pointer utility so event creation, response rendering, legacy masking, and encrypted-key destruction use the same canonical pointer behavior.
+- Implemented a local prototype key-provider abstraction using AES-256-GCM field encryption and AES-GCM wrapped DEKs stored only as non-plaintext metadata in `audit_event_encryption_keys`.
+- Modified event creation so configured payload pointers are encrypted before `payload_json` persistence and before `contentHash` calculation.
+- Extended response rendering so active encrypted fields decrypt for API reads, while destroyed keys return `[REDACTED]` and tampered or unavailable encrypted payloads fail safely.
+- Extended `POST /audit/events/{id}/redactions` to support hybrid requests containing both legacy overlay pointers and encrypted pointers, with one append-only certificate event and idempotent destroyed-key handling.
+- Added unit and integration tests covering encryption round trips, nonce uniqueness, AAD binding, wrong-key failures, certificate hygiene, mixed redaction, and verification after ciphertext tampering.
+- Updated README and architecture documentation to distinguish legacy presentation masking from new-record cryptographic redaction, and to document the local-provider and backup limitations.
+
+Human modifications and engineering judgment:
+- Chose one DEK per encrypted pointer instead of grouped pointers so the prototype can destroy a single sensitive field without silently redacting unrelated encrypted fields.
+- Kept verification over the stored encrypted representation to preserve the existing canonical hashing and chain semantics instead of introducing any decrypt-then-hash branch.
+- Supplied a test-only encryption key through `DynamicPropertySource` rather than source-controlled YAML so the repository still has no default usable runtime secret.
+
+Rejected suggestions:
+- Rejected rewriting historical legacy payloads or rehashing old rows, because Checkpoint 3 explicitly preserves Checkpoint 2 legacy overlay semantics.
+- Rejected storing plaintext, sensitive-value hashes, ciphertext copies, or wrapped-key bytes inside certificate events, because the certificate must remain non-sensitive metadata only.
+- Rejected adding a default operational master key to application configuration, because startup must fail fast when encryption is enabled without explicit key configuration.

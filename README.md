@@ -73,6 +73,57 @@ This repository preserves genuine development history:
 - Production system should externally anchor or digitally sign trusted checkpoints (out of scope for this prototype)
 - Single-instance deployment uses application-level locking; PostgreSQL-targeted design uses database-controlled serialization
 
+## Scenario B prototype behavior
+
+- **Legacy records** still use presentation masking overlays. Redaction for those rows does **not** rewrite `payload_json`, delete plaintext, or claim cryptographic erasure.
+- **New records** encrypt configured payload pointers before `payload_json` is stored. The persisted hash chain covers the stored encrypted representation.
+- **Key destruction** for encrypted pointers appends a `REDACTION_APPLIED` certificate event and makes future API reads return `[REDACTED]` without modifying stored ciphertext or historical hashes.
+- `GET /audit/verify` always verifies the original stored representation, including encrypted payloads, and never depends on response-time decryption.
+- This local prototype does **not** implement authorization, external KMS/HSM management, backup purging, or claims of complete erasure from privileged database access, backups, logs, caches, or replicas.
+
+## Local encryption configuration
+
+Set `AUDIT_ENCRYPTION_MASTER_KEY_BASE64` to a 32-byte Base64 AES key before starting the application. The repository does not include a default usable key, and startup fails fast when encryption is enabled without one.
+
+PowerShell example that creates a temporary 32-byte key in the current shell without writing the raw key to repository files:
+
+```powershell
+$bytes = New-Object byte[] 32
+[System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+$env:AUDIT_ENCRYPTION_MASTER_KEY_BASE64 = [Convert]::ToBase64String($bytes)
+[Array]::Clear($bytes, 0, $bytes.Length)
+```
+
+## Redaction examples
+
+Legacy presentation masking:
+
+```json
+POST /audit/events/{id}/redactions
+{
+  "jsonPointers": ["/ipAddress"],
+  "reasonCode": "PRIVACY_REQUEST",
+  "approvalRef": "CHG-2026-08-10-02",
+  "requestedBy": "privacy-user",
+  "approvedBy": "privacy-manager"
+}
+```
+
+Encrypted-pointer cryptographic redaction for new records:
+
+```json
+POST /audit/events/{id}/redactions
+{
+  "jsonPointers": ["/accountNumber"],
+  "reasonCode": "PRIVACY_REQUEST",
+  "approvalRef": "CHG-2026-08-11-01",
+  "requestedBy": "privacy-user",
+  "approvedBy": "privacy-manager"
+}
+```
+
+For encrypted Scenario B records, successful reads return decrypted values while the key is active and `[REDACTED]` after key destruction. For legacy Scenario A rows, masking is still presentation-only and the original plaintext remains in the database.
+
 ## Quick Links
 
 - Setup instructions: Run `./mvnw test` (or `mvnw.cmd test` on Windows)
