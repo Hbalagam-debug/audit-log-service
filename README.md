@@ -81,17 +81,38 @@ This repository preserves genuine development history:
 - `GET /audit/verify` always verifies the original stored representation, including encrypted payloads, and never depends on response-time decryption.
 - This local prototype does **not** implement authorization, external KMS/HSM management, backup purging, or claims of complete erasure from privileged database access, backups, logs, caches, or replicas.
 
-## Local encryption configuration
+## Local development quick start
 
-Set `AUDIT_ENCRYPTION_MASTER_KEY_BASE64` to a 32-byte Base64 AES key before starting the application. The repository does not include a default usable key, and startup fails fast when encryption is enabled without one.
+The application ships with dev-only fallback keys so it starts without any configuration:
 
-PowerShell example that creates a temporary 32-byte key in the current shell without writing the raw key to repository files:
+```powershell
+.\mvnw.cmd spring-boot:run
+```
+
+**For production/staging**, supply real keys via environment variables (they take priority over the fallback values):
+
+```powershell
+$env:AUDIT_ENCRYPTION_MASTER_KEY_BASE64 = "<32-byte Base64 AES key>"
+$env:AUDIT_EXPORT_SIGNING_PRIVATE_KEY_BASE64 = "<Ed25519 PKCS#8 Base64>"
+$env:AUDIT_EXPORT_SIGNING_PUBLIC_KEY_BASE64 = "<Ed25519 X.509 Base64>"
+.\mvnw.cmd spring-boot:run
+```
+
+PowerShell snippet to generate a fresh 32-byte encryption key:
 
 ```powershell
 $bytes = New-Object byte[] 32
 [System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
 $env:AUDIT_ENCRYPTION_MASTER_KEY_BASE64 = [Convert]::ToBase64String($bytes)
 [Array]::Clear($bytes, 0, $bytes.Length)
+```
+
+> ⚠️ The bundled fallback keys are development-only placeholders. Never use them in production.
+
+## Run tests
+
+```powershell
+.\mvnw.cmd clean test
 ```
 
 ## Redaction examples

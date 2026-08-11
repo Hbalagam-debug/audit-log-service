@@ -25,12 +25,14 @@ audit:
     format-version: enc-v1
     algorithm: AES-256-GCM
     sensitive-pointers: /accountNumber,/personalIdentifier
-    master-key-base64: ${AUDIT_ENCRYPTION_MASTER_KEY_BASE64:}
+    # Dev fallback (32 zero bytes). Override in production with AUDIT_ENCRYPTION_MASTER_KEY_BASE64.
+    master-key-base64: ${AUDIT_ENCRYPTION_MASTER_KEY_BASE64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}
   export:
     max-records: 10000
     signing:
       enabled: true
       algorithm: Ed25519
       key-id: export-key-2026-01
-      private-key-base64: ${AUDIT_EXPORT_SIGNING_PRIVATE_KEY_BASE64:}
-      public-key-base64: ${AUDIT_EXPORT_SIGNING_PUBLIC_KEY_BASE64:}
+      # Dev fallback keys. Override in production with the AUDIT_EXPORT_SIGNING_* env vars.
+      private-key-base64: ${AUDIT_EXPORT_SIGNING_PRIVATE_KEY_BASE64:MC4CAQAwBQYDK2VwBCIEIBMXSB3kRGMn+3SIkBb1nMQpYetU9nWECZp4wjLSpR9t}
+      public-key-base64: ${AUDIT_EXPORT_SIGNING_PUBLIC_KEY_BASE64:MCowBQYDK2VwAyEAK5h2EQALkCkrTwzvtNsiXe7qvvxAXWVV3tWDX16w+ds=}
