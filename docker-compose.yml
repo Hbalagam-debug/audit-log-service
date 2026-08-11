@@ -1,0 +1,24 @@
+services:
+  audit-log-service:
+    image: eclipse-temurin:17-jre
+    working_dir: /app
+    command: ["java", "-jar", "/app/audit-log-service.jar"]
+    ports:
+      - "8080:8080"
+    environment:
+      AUDIT_ENCRYPTION_MASTER_KEY_BASE64: ${AUDIT_ENCRYPTION_MASTER_KEY_BASE64}
+      AUDIT_EXPORT_SIGNING_ENABLED: ${AUDIT_EXPORT_SIGNING_ENABLED:-true}
+      AUDIT_EXPORT_SIGNING_KEY_ID: ${AUDIT_EXPORT_SIGNING_KEY_ID}
+      AUDIT_EXPORT_SIGNING_PRIVATE_KEY_FILE: /run/secrets/audit_export_signing_private_key
+      AUDIT_EXPORT_SIGNING_PUBLIC_KEY_FILE: /run/secrets/audit_export_signing_public_key
+    volumes:
+      - ./target/audit-log-service-0.0.1-SNAPSHOT.jar:/app/audit-log-service.jar:ro
+    secrets:
+      - audit_export_signing_private_key
+      - audit_export_signing_public_key
+
+secrets:
+  audit_export_signing_private_key:
+    file: ./secrets/audit-export-signing-private.key
+  audit_export_signing_public_key:
+    file: ./secrets/audit-export-signing-public.key

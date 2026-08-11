@@ -2,6 +2,8 @@ package com.auditlog.service.service;
 
 import com.auditlog.service.api.dto.AuditEventResponse;
 import com.auditlog.service.config.ExportProperties;
+import com.auditlog.service.config.ExportSignatureSupport;
+import com.auditlog.service.config.SigningKeyProvider;
 import com.auditlog.service.repository.AuditEventRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -37,6 +39,7 @@ public class ExportService {
     private final RedactionViewService redactionViewService;
     private final CanonicalHashService canonicalHashService;
     private final ExportProperties exportProperties;
+    private final SigningKeyProvider signingKeyProvider;
     private final Clock clock;
     private final ObjectMapper objectMapper = JsonMapper.builder().build();
 
@@ -46,7 +49,7 @@ public class ExportService {
         CanonicalHashService canonicalHashService,
         ExportProperties exportProperties
     ) {
-        this(repository, redactionViewService, canonicalHashService, exportProperties, Clock.systemUTC());
+        this(repository, redactionViewService, canonicalHashService, exportProperties, null, Clock.systemUTC());
     }
 
     @Autowired
@@ -55,13 +58,25 @@ public class ExportService {
         RedactionViewService redactionViewService,
         CanonicalHashService canonicalHashService,
         ExportProperties exportProperties,
+        SigningKeyProvider signingKeyProvider,
         Clock clock
     ) {
         this.repository = repository;
         this.redactionViewService = redactionViewService;
         this.canonicalHashService = canonicalHashService;
         this.exportProperties = exportProperties;
+        this.signingKeyProvider = signingKeyProvider;
         this.clock = clock;
+    }
+
+    public ExportService(
+        AuditEventRepository repository,
+        RedactionViewService redactionViewService,
+        CanonicalHashService canonicalHashService,
+        ExportProperties exportProperties,
+        Clock clock
+    ) {
+        this(repository, redactionViewService, canonicalHashService, exportProperties, null, clock);
     }
 
     public JsonNode export(String actorId, String resourceId, String from, String to, boolean includeArchived) {
@@ -264,17 +279,17 @@ public class ExportService {
     }
 
     private ObjectNode buildSignatureNode(String bundleDigest) {
+        if (signingKeyProvider == null) {
+            throw new IllegalStateException("Export signing is enabled but no SigningKeyProvider is configured");
+        }
         ObjectNode signatureNode = objectMapper.createObjectNode();
         signatureNode.put("algorithm", exportProperties.getSigning().getAlgorithm());
-        signatureNode.put("keyId", exportProperties.getSigning().getKeyId());
+        signatureNode.put("keyId", signingKeyProvider.getKeyId());
         signatureNode.put(
             "value",
-            com.auditlog.service.config.ExportSignatureSupport.signDigestToBase64(
-                bundleDigest,
-                exportProperties.getSigning().getResolvedPrivateKey()
-            )
+            ExportSignatureSupport.signDigestToBase64(bundleDigest, signingKeyProvider.loadPrivateKey())
         );
-        signatureNode.put("publicKey", exportProperties.getSigning().getNormalizedPublicKeyBase64());
+        signatureNode.put("publicKey", ExportSignatureSupport.encodePublicKeyBase64(signingKeyProvider.loadPublicKey()));
         return signatureNode;
     }
 

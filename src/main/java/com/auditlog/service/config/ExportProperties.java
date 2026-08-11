@@ -5,9 +5,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 import org.springframework.validation.annotation.Validated;
 
-import java.security.PrivateKey;
-import java.security.PublicKey;
-
 @Component
 @ConfigurationProperties(prefix = "audit.export")
 @Validated
@@ -45,18 +42,14 @@ public class ExportProperties {
     public static class SigningProperties {
         private boolean enabled = true;
         private String algorithm = ExportSignatureSupport.SUPPORTED_SIGNATURE_ALGORITHM;
-        private String keyId = "export-key-2026-01";
+        private String keyId = "";
+        private String privateKeyFile = "";
         private String privateKeyBase64 = "";
+        private String publicKeyFile = "";
         private String publicKeyBase64 = "";
-        private transient PrivateKey resolvedPrivateKey;
-        private transient PublicKey resolvedPublicKey;
-        private transient String normalizedPublicKeyBase64;
 
         public void validate() {
             if (!enabled) {
-                resolvedPrivateKey = null;
-                resolvedPublicKey = null;
-                normalizedPublicKeyBase64 = null;
                 return;
             }
 
@@ -66,17 +59,6 @@ public class ExportProperties {
             if (keyId == null || keyId.isBlank()) {
                 throw new IllegalStateException("audit.export.signing.key-id must be configured when audit.export.signing.enabled=true");
             }
-            if (privateKeyBase64 == null || privateKeyBase64.isBlank()) {
-                throw new IllegalStateException("audit.export.signing.private-key-base64 must be configured when audit.export.signing.enabled=true");
-            }
-            if (publicKeyBase64 == null || publicKeyBase64.isBlank()) {
-                throw new IllegalStateException("audit.export.signing.public-key-base64 must be configured when audit.export.signing.enabled=true");
-            }
-
-            resolvedPrivateKey = ExportSignatureSupport.decodePrivateKey(privateKeyBase64, "audit.export.signing.private-key-base64");
-            resolvedPublicKey = ExportSignatureSupport.decodePublicKey(publicKeyBase64, "audit.export.signing.public-key-base64");
-            normalizedPublicKeyBase64 = ExportSignatureSupport.encodePublicKeyBase64(resolvedPublicKey);
-            ExportSignatureSupport.validateKeyPair(resolvedPrivateKey, resolvedPublicKey);
         }
 
         public boolean isEnabled() {
@@ -107,8 +89,24 @@ public class ExportProperties {
             return privateKeyBase64;
         }
 
+        public String getPrivateKeyFile() {
+            return privateKeyFile;
+        }
+
+        public void setPrivateKeyFile(String privateKeyFile) {
+            this.privateKeyFile = privateKeyFile;
+        }
+
         public void setPrivateKeyBase64(String privateKeyBase64) {
             this.privateKeyBase64 = privateKeyBase64;
+        }
+
+        public String getPublicKeyFile() {
+            return publicKeyFile;
+        }
+
+        public void setPublicKeyFile(String publicKeyFile) {
+            this.publicKeyFile = publicKeyFile;
         }
 
         public String getPublicKeyBase64() {
@@ -117,18 +115,6 @@ public class ExportProperties {
 
         public void setPublicKeyBase64(String publicKeyBase64) {
             this.publicKeyBase64 = publicKeyBase64;
-        }
-
-        public PrivateKey getResolvedPrivateKey() {
-            return resolvedPrivateKey;
-        }
-
-        public PublicKey getResolvedPublicKey() {
-            return resolvedPublicKey;
-        }
-
-        public String getNormalizedPublicKeyBase64() {
-            return normalizedPublicKeyBase64;
         }
     }
 }

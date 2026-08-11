@@ -83,18 +83,42 @@ This repository preserves genuine development history:
 
 ## Local development quick start
 
-The application ships with dev-only fallback keys so it starts without any configuration:
+The service now fails fast when export signing is enabled and valid Ed25519 signing keys are not configured.
+
+**Safe local PowerShell setup**
 
 ```powershell
+New-Item -ItemType Directory -Force .\secrets | Out-Null
+
+$encBytes = New-Object byte[] 32
+[System.Security.Cryptography.RandomNumberGenerator]::Fill($encBytes)
+$env:AUDIT_ENCRYPTION_MASTER_KEY_BASE64 = [Convert]::ToBase64String($encBytes)
+[Array]::Clear($encBytes, 0, $encBytes.Length)
+
+$env:AUDIT_EXPORT_SIGNING_KEY_ID = "local-export-key-001"
+$env:AUDIT_EXPORT_SIGNING_ENABLED = "true"
+java -cp target\classes com.auditlog.service.service.ExportSigningKeyGeneratorCli |
+  Set-Content -Path .\secrets\export-signing-env.txt
+
+$envLines = Get-Content .\secrets\export-signing-env.txt
+$privateLine = $envLines | Where-Object { $_ -like 'AUDIT_EXPORT_SIGNING_PRIVATE_KEY_BASE64=*' }
+$publicLine = $envLines | Where-Object { $_ -like 'AUDIT_EXPORT_SIGNING_PUBLIC_KEY_BASE64=*' }
+Set-Content -Path .\secrets\audit-export-signing-private.key -Value ($privateLine -replace '^AUDIT_EXPORT_SIGNING_PRIVATE_KEY_BASE64=', '')
+Set-Content -Path .\secrets\audit-export-signing-public.key -Value ($publicLine -replace '^AUDIT_EXPORT_SIGNING_PUBLIC_KEY_BASE64=', '')
+Remove-Item .\secrets\export-signing-env.txt
+
+$env:AUDIT_EXPORT_SIGNING_PRIVATE_KEY_FILE = (Resolve-Path .\secrets\audit-export-signing-private.key).Path
+$env:AUDIT_EXPORT_SIGNING_PUBLIC_KEY_FILE = (Resolve-Path .\secrets\audit-export-signing-public.key).Path
+
 .\mvnw.cmd spring-boot:run
 ```
 
-**For production/staging**, supply real keys via environment variables (they take priority over the fallback values):
+Local Base64 fallback is still supported when file paths are not set:
 
 ```powershell
-$env:AUDIT_ENCRYPTION_MASTER_KEY_BASE64 = "<32-byte Base64 AES key>"
-$env:AUDIT_EXPORT_SIGNING_PRIVATE_KEY_BASE64 = "<Ed25519 PKCS#8 Base64>"
-$env:AUDIT_EXPORT_SIGNING_PUBLIC_KEY_BASE64 = "<Ed25519 X.509 Base64>"
+$env:AUDIT_EXPORT_SIGNING_PRIVATE_KEY_BASE64 = "<Base64 PKCS#8 Ed25519 private key>"
+$env:AUDIT_EXPORT_SIGNING_PUBLIC_KEY_BASE64 = "<Base64 X.509 Ed25519 public key>"
+$env:AUDIT_EXPORT_SIGNING_ENABLED = "true"
 .\mvnw.cmd spring-boot:run
 ```
 
@@ -107,7 +131,7 @@ $env:AUDIT_ENCRYPTION_MASTER_KEY_BASE64 = [Convert]::ToBase64String($bytes)
 [Array]::Clear($bytes, 0, $bytes.Length)
 ```
 
-> ⚠️ The bundled fallback keys are development-only placeholders. Never use them in production.
+> Never commit generated keys, Base64 values, `.db` files, `.env` files, or anything under `secrets/`.
 
 ## Run tests
 
@@ -249,7 +273,7 @@ Returns a deterministic, verifiable JSON bundle of audit events filtered by a si
 ```json
 "signature": {
   "algorithm": "Ed25519",
-  "keyId": "export-key-2026-01",
+  "keyId": "<configured signing key id>",
   "value": "<Base64 signature>",
   "publicKey": "<Base64 X.509 encoded public key>"
 }
@@ -282,14 +306,23 @@ For offline CLI-style verification, run the utility main class with a bundle fil
 
 ```text
 java -cp target\classes com.auditlog.service.service.ExportVerifierCli path\to\bundle.json
-java -cp target\classes com.auditlog.service.service.ExportVerifierCli path\to\bundle.json export-key-2026-01 <Base64-X509-public-key>
+java -cp target\classes com.auditlog.service.service.ExportVerifierCli path\to\bundle.json <configured-key-id> <Base64-X509-public-key>
 ```
 
 ## Local signing-key setup
 
-The application fails fast when `audit.export.signing.enabled=true` and valid Ed25519 signing keys are not configured.
+The application starts with export signing disabled by default. It fails fast only when `AUDIT_EXPORT_SIGNING_ENABLED=true` and valid Ed25519 signing keys are not configured.
 
 Configure these environment variables before starting the service locally:
+
+```text
+AUDIT_EXPORT_SIGNING_ENABLED=true
+AUDIT_EXPORT_SIGNING_KEY_ID=<stable key identifier>
+AUDIT_EXPORT_SIGNING_PRIVATE_KEY_FILE=<path to Base64 PKCS#8 Ed25519 private key file>
+AUDIT_EXPORT_SIGNING_PUBLIC_KEY_FILE=<path to Base64 X.509 Ed25519 public key file>
+```
+
+If file paths are not set, local development may fall back to:
 
 ```text
 AUDIT_EXPORT_SIGNING_PRIVATE_KEY_BASE64=<Base64 PKCS#8 Ed25519 private key>
@@ -302,11 +335,16 @@ Generate a local test-only key pair with:
 java -cp target\classes com.auditlog.service.service.ExportSigningKeyGeneratorCli
 ```
 
-The generator prints a clear warning and emits shell-ready values for:
-- `AUDIT_EXPORT_SIGNING_PRIVATE_KEY_BASE64`
-- `AUDIT_EXPORT_SIGNING_PUBLIC_KEY_BASE64`
+The generator prints a warning and emits shell-ready Base64 values for the fallback variables above. Prefer writing those values to ignored files under `secrets/` and pointing `AUDIT_EXPORT_SIGNING_PRIVATE_KEY_FILE` / `AUDIT_EXPORT_SIGNING_PUBLIC_KEY_FILE` at those files.
 
-These generated keys are for **local testing only** and must not be committed or used as production signing keys.
+### Key rotation guidance
+
+1. Generate a new Ed25519 key pair outside Git and store it under `secrets/` or your platform secret manager.
+2. Assign a new `AUDIT_EXPORT_SIGNING_KEY_ID` value before restarting the service.
+3. Update both private and public key references together.
+4. Keep the retired public key available to offline verifiers for older bundles until their retention window expires.
+
+Do not commit generated keys, Base64 values, database files, `.env` files, or mounted secret files.
 
 ---
 

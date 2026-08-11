@@ -2,6 +2,7 @@ package com.auditlog.service.integration;
 
 import com.auditlog.service.SpringBootTestSupport;
 import com.auditlog.service.config.ExportProperties;
+import com.auditlog.service.config.SigningKeyProvider;
 import com.auditlog.service.repository.AuditEventRepository;
 import com.auditlog.service.service.CanonicalHashService;
 import com.auditlog.service.service.ExportService;
@@ -68,6 +69,9 @@ class ExportControllerIntegrationTest extends SpringBootTestSupport {
 
     @Autowired
     private ExportProperties exportProperties;
+
+    @Autowired
+    private SigningKeyProvider signingKeyProvider;
 
     private MockMvc mockMvc;
     private final ObjectMapper objectMapper = JsonMapper.builder().build();
@@ -245,6 +249,7 @@ class ExportControllerIntegrationTest extends SpringBootTestSupport {
             redactionViewService,
             canonicalHashService,
             exportProperties,
+            signingKeyProvider,
             fixedClock
         );
         JsonNode bundle1 = fixedClockExportService.export("deterministic-actor", null, null, null, false);
@@ -274,7 +279,7 @@ class ExportControllerIntegrationTest extends SpringBootTestSupport {
         JsonNode signature = bundle.get("signature");
 
         assertEquals("Ed25519", signature.get("algorithm").asText());
-        assertEquals("export-key-2026-01", signature.get("keyId").asText());
+        assertEquals(TEST_EXPORT_SIGNING_KEY_ID, signature.get("keyId").asText());
         assertEquals(TEST_EXPORT_SIGNING_PUBLIC_KEY_BASE64, signature.get("publicKey").asText());
 
         ExportVerifier.VerificationResult verificationResult = exportVerifier.verify(bundle.toString());
@@ -282,7 +287,7 @@ class ExportControllerIntegrationTest extends SpringBootTestSupport {
         assertTrue(verificationResult.recordsDigestValid());
         assertTrue(verificationResult.bundleDigestValid());
         assertTrue(verificationResult.signatureValid());
-        assertEquals("export-key-2026-01", verificationResult.keyId());
+        assertEquals(TEST_EXPORT_SIGNING_KEY_ID, verificationResult.keyId());
     }
 
     @Test
@@ -397,7 +402,7 @@ class ExportControllerIntegrationTest extends SpringBootTestSupport {
 
         KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("Ed25519");
         String wrongPublicKey = Base64.getEncoder().encodeToString(keyPairGenerator.generateKeyPair().getPublic().getEncoded());
-        ExportVerifier wrongKeyVerifier = new ExportVerifier(canonicalHashService, "export-key-2026-01", wrongPublicKey);
+        ExportVerifier wrongKeyVerifier = new ExportVerifier(canonicalHashService, TEST_EXPORT_SIGNING_KEY_ID, wrongPublicKey);
 
         ExportVerifier.VerificationResult vr = wrongKeyVerifier.verify(result.getResponse().getContentAsString());
         assertFalse(vr.valid());

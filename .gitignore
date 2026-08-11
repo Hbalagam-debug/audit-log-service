@@ -63,8 +63,10 @@ audit-log-*.db
 
 # Local Environment Configuration
 .env
+.env.*
 .env.local
 .env.*.local
+!.env.example
 local.properties
 application-local.yml
 application-local.yaml

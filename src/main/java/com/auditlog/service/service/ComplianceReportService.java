@@ -8,6 +8,7 @@ import com.auditlog.service.api.dto.ComplianceReportResponse;
 import com.auditlog.service.config.ComplianceReportProperties;
 import com.auditlog.service.config.ExportProperties;
 import com.auditlog.service.config.ExportSignatureSupport;
+import com.auditlog.service.config.SigningKeyProvider;
 import com.auditlog.service.domain.AuditEvent;
 import com.auditlog.service.repository.AuditEventRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -52,6 +53,7 @@ public class ComplianceReportService {
     private final AuditEventService auditEventService;
     private final CanonicalHashService canonicalHashService;
     private final ExportProperties exportProperties;
+    private final SigningKeyProvider signingKeyProvider;
     private final Clock clock;
     private final ObjectMapper objectMapper = JsonMapper.builder().build();
 
@@ -61,7 +63,28 @@ public class ComplianceReportService {
         RedactionViewService redactionViewService,
         ComplianceReportProperties properties
     ) {
-        this(repository, redactionViewService, properties, null, null, null, Clock.systemUTC());
+        this(repository, redactionViewService, properties, null, null, null, null, Clock.systemUTC());
+    }
+
+    public ComplianceReportService(
+        AuditEventRepository repository,
+        RedactionViewService redactionViewService,
+        ComplianceReportProperties properties,
+        AuditEventService auditEventService,
+        CanonicalHashService canonicalHashService,
+        ExportProperties exportProperties,
+        Clock clock
+    ) {
+        this(
+            repository,
+            redactionViewService,
+            properties,
+            auditEventService,
+            canonicalHashService,
+            exportProperties,
+            null,
+            clock
+        );
     }
 
     // Full constructor — used by Spring (via @Autowired) and H2 tests
@@ -73,6 +96,7 @@ public class ComplianceReportService {
         AuditEventService auditEventService,
         CanonicalHashService canonicalHashService,
         ExportProperties exportProperties,
+        SigningKeyProvider signingKeyProvider,
         Clock clock
     ) {
         this.repository = repository;
@@ -81,6 +105,7 @@ public class ComplianceReportService {
         this.auditEventService = auditEventService;
         this.canonicalHashService = canonicalHashService;
         this.exportProperties = exportProperties;
+        this.signingKeyProvider = signingKeyProvider;
         this.clock = clock;
     }
 
@@ -465,12 +490,14 @@ public class ComplianceReportService {
     }
 
     private ObjectNode buildBundleSignatureNode(String bundleDigest) {
+        if (signingKeyProvider == null) {
+            throw new IllegalStateException("Compliance bundle signing is enabled but no SigningKeyProvider is configured");
+        }
         ObjectNode sig = objectMapper.createObjectNode();
         sig.put("algorithm", exportProperties.getSigning().getAlgorithm());
-        sig.put("keyId", exportProperties.getSigning().getKeyId());
-        sig.put("value", ExportSignatureSupport.signDigestToBase64(
-            bundleDigest, exportProperties.getSigning().getResolvedPrivateKey()));
-        sig.put("publicKey", exportProperties.getSigning().getNormalizedPublicKeyBase64());
+        sig.put("keyId", signingKeyProvider.getKeyId());
+        sig.put("value", ExportSignatureSupport.signDigestToBase64(bundleDigest, signingKeyProvider.loadPrivateKey()));
+        sig.put("publicKey", ExportSignatureSupport.encodePublicKeyBase64(signingKeyProvider.loadPublicKey()));
         return sig;
     }
 
@@ -495,8 +522,11 @@ public class ComplianceReportService {
         String approvalRef, String reasonCode,
         int recordCount, String bundleDigest, String criteriaDigest, String generatedAt
     ) {
+        if (exportProperties.getSigning().isEnabled() && signingKeyProvider == null) {
+            throw new IllegalStateException("Compliance bundle signing is enabled but no SigningKeyProvider is configured");
+        }
         String signingKeyId = exportProperties.getSigning().isEnabled()
-            ? exportProperties.getSigning().getKeyId()
+            ? signingKeyProvider.getKeyId()
             : null;
 
         ObjectNode payload = objectMapper.createObjectNode();
@@ -545,4 +575,3 @@ public class ComplianceReportService {
         }
     }
 }
-

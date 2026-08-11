@@ -30,9 +30,10 @@ audit:
   export:
     max-records: 10000
     signing:
-      enabled: true
+      enabled: ${AUDIT_EXPORT_SIGNING_ENABLED:false}
       algorithm: Ed25519
-      key-id: export-key-2026-01
-      # Dev fallback keys. Override in production with the AUDIT_EXPORT_SIGNING_* env vars.
-      private-key-base64: ${AUDIT_EXPORT_SIGNING_PRIVATE_KEY_BASE64:MC4CAQAwBQYDK2VwBCIEIBMXSB3kRGMn+3SIkBb1nMQpYetU9nWECZp4wjLSpR9t}
-      public-key-base64: ${AUDIT_EXPORT_SIGNING_PUBLIC_KEY_BASE64:MCowBQYDK2VwAyEAK5h2EQALkCkrTwzvtNsiXe7qvvxAXWVV3tWDX16w+ds=}
+      key-id: ${AUDIT_EXPORT_SIGNING_KEY_ID:}
+      private-key-file: ${AUDIT_EXPORT_SIGNING_PRIVATE_KEY_FILE:}
+      private-key-base64: ${AUDIT_EXPORT_SIGNING_PRIVATE_KEY_BASE64:}
+      public-key-file: ${AUDIT_EXPORT_SIGNING_PUBLIC_KEY_FILE:}
+      public-key-base64: ${AUDIT_EXPORT_SIGNING_PUBLIC_KEY_BASE64:}

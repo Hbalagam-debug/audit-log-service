@@ -12,21 +12,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class ExportPropertiesTest extends SpringBootTestSupport {
 
     @Test
-    @DisplayName("Rejects missing signing private key when signing is enabled")
-    void testRejectsMissingSigningPrivateKey() {
+    @DisplayName("Rejects missing signing key id when signing is enabled")
+    void testRejectsMissingSigningKeyId() {
         ExportProperties properties = new ExportProperties();
-        properties.getSigning().setPrivateKeyBase64("");
-        properties.getSigning().setPublicKeyBase64(TEST_EXPORT_SIGNING_PUBLIC_KEY_BASE64);
-
-        assertThrows(IllegalStateException.class, properties::validate);
-    }
-
-    @Test
-    @DisplayName("Rejects invalid Base64 signing key configuration")
-    void testRejectsInvalidBase64SigningKeyConfiguration() {
-        ExportProperties properties = new ExportProperties();
-        properties.getSigning().setPrivateKeyBase64("not-base64");
-        properties.getSigning().setPublicKeyBase64(TEST_EXPORT_SIGNING_PUBLIC_KEY_BASE64);
+        properties.getSigning().setKeyId("");
 
         assertThrows(IllegalStateException.class, properties::validate);
     }
@@ -36,18 +25,26 @@ class ExportPropertiesTest extends SpringBootTestSupport {
     void testRejectsUnsupportedSigningAlgorithm() {
         ExportProperties properties = new ExportProperties();
         properties.getSigning().setAlgorithm("RSA");
-        properties.getSigning().setPrivateKeyBase64(TEST_EXPORT_SIGNING_PRIVATE_KEY_BASE64);
-        properties.getSigning().setPublicKeyBase64(TEST_EXPORT_SIGNING_PUBLIC_KEY_BASE64);
+        properties.getSigning().setKeyId(TEST_EXPORT_SIGNING_KEY_ID);
 
         assertThrows(IllegalStateException.class, properties::validate);
     }
 
     @Test
-    @DisplayName("Accepts valid signing configuration")
+    @DisplayName("Allows disabled signing without key material")
+    void testAllowsDisabledSigningWithoutKeyMaterial() {
+        ExportProperties properties = new ExportProperties();
+        properties.getSigning().setEnabled(false);
+        properties.getSigning().setKeyId("");
+
+        assertDoesNotThrow(properties::validate);
+    }
+
+    @Test
+    @DisplayName("Accepts valid signing property configuration")
     void testAcceptsValidSigningConfiguration() {
         ExportProperties properties = new ExportProperties();
-        properties.getSigning().setPrivateKeyBase64(TEST_EXPORT_SIGNING_PRIVATE_KEY_BASE64);
-        properties.getSigning().setPublicKeyBase64(TEST_EXPORT_SIGNING_PUBLIC_KEY_BASE64);
+        properties.getSigning().setKeyId(TEST_EXPORT_SIGNING_KEY_ID);
 
         assertDoesNotThrow(properties::validate);
     }

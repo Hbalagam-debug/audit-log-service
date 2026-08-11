@@ -520,3 +520,30 @@ Scope note:
 - No Scenario A/B code modified; backward compatibility maintained.
 - No schema changes.
 - No commit or push performed (awaiting human review).
+
+## Entry: Export signing key-provider hardening
+
+Date: 2026-08-11
+
+Prompt summary:
+- Remove committed Ed25519 signing key material from application configuration and source.
+- Introduce a signing key provider that loads from secret files first and Base64 environment fallback second.
+- Fail fast safely when signing is enabled but key configuration is missing or invalid.
+- Add startup/unit coverage, Docker Compose secret wiring, `.gitignore` updates, and README guidance.
+
+Accepted changes:
+- Added `SigningKeyProvider` plus `FileOrEnvironmentSigningKeyProvider` to centralize Ed25519 private/public key loading and startup validation.
+- Removed committed signing key material from `src/main/resources/application.yml` and deleted the old `application-local.yml` secret-bearing profile.
+- Updated export/compliance signing and verification flows to use the provider instead of storing resolved private keys in `ExportProperties`.
+- Replaced hard-coded test signing keys with runtime-generated test keys.
+- Added provider-focused unit coverage for file loading, Base64 fallback, invalid Base64, invalid key format, missing key configuration, safe exception handling, and signing/verification round trip.
+- Added `.env.example`, expanded `.gitignore`, and created `docker-compose.yml` using `/run/secrets` mounts and environment-configured secret paths.
+- Updated README with safe local PowerShell setup, file-based secret guidance, Base64 fallback notes, and key rotation instructions.
+
+Rejected suggestions:
+- Rejected keeping dev fallback signing keys in `application.yml` or `application-local.yml`, because private key material must not live in source control.
+- Rejected logging raw key values or echoing them in startup exceptions, because safe failure messaging must not expose secret material.
+
+Human modifications and engineering judgment:
+- Kept Base64 environment fallback for local development, but made file-based loading the primary path so Docker Compose and secret managers can mount read-only key files.
+- Left existing offline verification behavior intact by deriving the trusted public key from the same provider-backed configuration.

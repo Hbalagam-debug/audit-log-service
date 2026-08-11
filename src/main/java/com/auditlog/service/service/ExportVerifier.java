@@ -2,6 +2,7 @@ package com.auditlog.service.service;
 
 import com.auditlog.service.config.ExportProperties;
 import com.auditlog.service.config.ExportSignatureSupport;
+import com.auditlog.service.config.SigningKeyProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.ObjectMapper;
@@ -33,15 +34,21 @@ public class ExportVerifier {
     private final ObjectMapper objectMapper = JsonMapper.builder().build();
 
     public ExportVerifier(CanonicalHashService canonicalHashService) {
-        this(canonicalHashService, null, null);
+        this(canonicalHashService, (String) null, (String) null);
     }
 
     @Autowired
-    public ExportVerifier(CanonicalHashService canonicalHashService, ExportProperties exportProperties) {
+    public ExportVerifier(
+        CanonicalHashService canonicalHashService,
+        ExportProperties exportProperties,
+        SigningKeyProvider signingKeyProvider
+    ) {
         this(
             canonicalHashService,
-            exportProperties.getSigning().isEnabled() ? exportProperties.getSigning().getKeyId() : null,
-            exportProperties.getSigning().isEnabled() ? exportProperties.getSigning().getNormalizedPublicKeyBase64() : null
+            exportProperties.getSigning().isEnabled() ? signingKeyProvider.getKeyId() : null,
+            exportProperties.getSigning().isEnabled()
+                ? ExportSignatureSupport.encodePublicKeyBase64(signingKeyProvider.loadPublicKey())
+                : null
         );
     }
 
