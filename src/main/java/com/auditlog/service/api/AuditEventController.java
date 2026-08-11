@@ -3,6 +3,8 @@ package com.auditlog.service.api;
 import com.auditlog.service.api.dto.AuditEventCreateRequest;
 import com.auditlog.service.api.dto.AuditEventResponse;
 import com.auditlog.service.api.dto.QueryResponse;
+import com.auditlog.service.api.dto.RedactionRequest;
+import com.auditlog.service.api.dto.RedactionResponse;
 import com.auditlog.service.api.dto.RetentionRunRequest;
 import com.auditlog.service.api.dto.RetentionRunResponse;
 import com.auditlog.service.api.dto.VerificationResultResponse;
@@ -10,6 +12,7 @@ import com.auditlog.service.domain.AuditEvent;
 import com.auditlog.service.service.AuditEventService;
 import com.auditlog.service.service.ChainVerificationService;
 import com.auditlog.service.service.QueryService;
+import com.auditlog.service.service.RedactionService;
 import com.auditlog.service.service.RetentionService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -23,17 +26,20 @@ public class AuditEventController {
     private final QueryService queryService;
     private final ChainVerificationService verificationService;
     private final RetentionService retentionService;
+    private final RedactionService redactionService;
 
     public AuditEventController(
         AuditEventService auditEventService,
         QueryService queryService,
         ChainVerificationService verificationService,
-        RetentionService retentionService
+        RetentionService retentionService,
+        RedactionService redactionService
     ) {
         this.auditEventService = auditEventService;
         this.queryService = queryService;
         this.verificationService = verificationService;
         this.retentionService = retentionService;
+        this.redactionService = redactionService;
     }
 
     @PostMapping("/events")
@@ -72,6 +78,16 @@ public class AuditEventController {
     public ResponseEntity<RetentionRunResponse> runRetention(@Valid @RequestBody RetentionRunRequest request) {
         RetentionRunResponse response = retentionService.runRetention(request);
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/events/{id}/redactions")
+    public ResponseEntity<RedactionResponse> redactEvent(
+        @PathVariable String id,
+        @Valid @RequestBody RedactionRequest request
+    ) {
+        RedactionResponse response = redactionService.applyRedaction(id, request);
+        boolean created = response.redactionCertificateEventId() != null && !response.redactionCertificateEventId().isBlank();
+        return ResponseEntity.status(created ? HttpStatus.CREATED : HttpStatus.OK).body(response);
     }
 
     @GetMapping("/verify")

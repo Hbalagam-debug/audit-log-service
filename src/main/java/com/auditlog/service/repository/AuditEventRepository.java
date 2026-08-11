@@ -1,6 +1,7 @@
 package com.auditlog.service.repository;
 
 import com.auditlog.service.domain.AuditEvent;
+import com.auditlog.service.domain.RedactionOverlay;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
@@ -41,6 +42,21 @@ public class AuditEventRepository {
             throw new RuntimeException("Failed to map row to AuditEvent", e);
         }
     };
+
+    private final RowMapper<RedactionOverlay> redactionOverlayRowMapper = (rs, rowNum) -> new RedactionOverlay(
+        rs.getString("id"),
+        rs.getString("event_id"),
+        rs.getLong("event_chain_position"),
+        rs.getString("json_pointer"),
+        rs.getString("redaction_mode"),
+        rs.getString("reason_code"),
+        rs.getString("approval_ref"),
+        rs.getString("requested_by"),
+        rs.getString("approved_by"),
+        rs.getString("applied_at"),
+        rs.getString("certificate_event_id"),
+        rs.getBoolean("active")
+    );
 
     public void insert(AuditEvent event) {
         String sql = "INSERT INTO audit_events " +
@@ -195,5 +211,65 @@ public class AuditEventRepository {
     public List<AuditEvent> findAllOrderedByPosition() {
         String sql = "SELECT * FROM audit_events ORDER BY chain_position ASC";
         return jdbcTemplate.query(sql, eventRowMapper);
+    }
+
+    public List<RedactionOverlay> findActiveOverlaysForEventId(String eventId) {
+        String sql = "SELECT * FROM audit_event_redactions WHERE event_id = ? AND active = TRUE ORDER BY json_pointer ASC";
+        return jdbcTemplate.query(sql, redactionOverlayRowMapper, eventId);
+    }
+
+    public List<RedactionOverlay> findActiveOverlaysForEventIds(List<String> eventIds) {
+        if (eventIds == null || eventIds.isEmpty()) {
+            return List.of();
+        }
+        String placeholders = String.join(",", java.util.Collections.nCopies(eventIds.size(), "?"));
+        String sql = "SELECT * FROM audit_event_redactions WHERE active = TRUE AND event_id IN (" + placeholders + ") ORDER BY event_id, json_pointer ASC";
+        return jdbcTemplate.query(sql, redactionOverlayRowMapper, eventIds.toArray());
+    }
+
+    public void insertRedactionOverlay(
+        String id,
+        String eventId,
+        long eventChainPosition,
+        String jsonPointer,
+        String redactionMode,
+        String reasonCode,
+        String approvalRef,
+        String requestedBy,
+        String approvedBy,
+        String appliedAt,
+        String certificateEventId,
+        boolean active
+    ) {
+        String sql = "INSERT INTO audit_event_redactions (id, event_id, event_chain_position, json_pointer, redaction_mode, reason_code, approval_ref, requested_by, approved_by, applied_at, certificate_event_id, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        jdbcTemplate.update(
+            sql,
+            id,
+            eventId,
+            eventChainPosition,
+            jsonPointer,
+            redactionMode,
+            reasonCode,
+            approvalRef,
+            requestedBy,
+            approvedBy,
+            appliedAt,
+            certificateEventId,
+            active
+        );
+    }
+
+    public void linkRedactionOverlaysToCertificate(String eventId, List<String> pointers, String certificateEventId) {
+        if (pointers == null || pointers.isEmpty()) {
+            return;
+        }
+        for (String pointer : pointers) {
+            jdbcTemplate.update(
+                "UPDATE audit_event_redactions SET certificate_event_id = ? WHERE event_id = ? AND json_pointer = ? AND active = TRUE",
+                certificateEventId,
+                eventId,
+                pointer
+            );
+        }
     }
 }

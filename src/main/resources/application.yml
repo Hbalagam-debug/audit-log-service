@@ -16,3 +16,7 @@ audit:
     window-days: 90
     default-dry-run: true
     require-approval: true
+  redaction:
+    require-approval: true
+    mask-value: '[REDACTED]'
+    allow-list: /ipAddress,/deviceId,/accountNumber,/personalIdentifier

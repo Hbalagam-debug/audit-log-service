@@ -49,6 +49,22 @@ CREATE TABLE IF NOT EXISTS retention_runs (
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS audit_event_redactions (
+    id TEXT PRIMARY KEY,
+    event_id TEXT NOT NULL,
+    event_chain_position INTEGER NOT NULL,
+    json_pointer TEXT NOT NULL,
+    redaction_mode TEXT NOT NULL,
+    reason_code TEXT NOT NULL,
+    approval_ref TEXT NOT NULL,
+    requested_by TEXT NOT NULL,
+    approved_by TEXT NOT NULL,
+    applied_at TEXT NOT NULL,
+    certificate_event_id TEXT,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    FOREIGN KEY (event_id) REFERENCES audit_events(id)
+);
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_chain_position ON audit_events(chain_position);
 CREATE INDEX IF NOT EXISTS idx_actor_id ON audit_events(actor_id);
 CREATE INDEX IF NOT EXISTS idx_resource_type ON audit_events(resource_type);
@@ -57,3 +73,5 @@ CREATE INDEX IF NOT EXISTS idx_event_type ON audit_events(event_type);
 CREATE INDEX IF NOT EXISTS idx_event_timestamp ON audit_events(event_timestamp);
 CREATE INDEX IF NOT EXISTS idx_retention_runs_status ON retention_runs(status);
 CREATE INDEX IF NOT EXISTS idx_retention_runs_started_at ON retention_runs(started_at);
+CREATE INDEX IF NOT EXISTS idx_redaction_event_id ON audit_event_redactions(event_id);
+CREATE INDEX IF NOT EXISTS idx_redaction_event_pointer ON audit_event_redactions(event_id, json_pointer);

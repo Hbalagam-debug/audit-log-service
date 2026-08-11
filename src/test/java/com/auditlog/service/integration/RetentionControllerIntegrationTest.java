@@ -6,6 +6,7 @@ import com.auditlog.service.api.dto.QueryResponse;
 import com.auditlog.service.api.dto.RetentionRunRequest;
 import com.auditlog.service.api.dto.RetentionRunResponse;
 import com.auditlog.service.api.dto.VerificationResultResponse;
+import com.auditlog.service.config.RedactionProperties;
 import com.auditlog.service.config.RetentionProperties;
 import com.auditlog.service.domain.AuditEvent;
 import com.auditlog.service.repository.AuditEventRepository;
@@ -13,6 +14,7 @@ import com.auditlog.service.service.AuditEventService;
 import com.auditlog.service.service.CanonicalHashService;
 import com.auditlog.service.service.ChainVerificationService;
 import com.auditlog.service.service.QueryService;
+import com.auditlog.service.service.RedactionService;
 import com.auditlog.service.service.RetentionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -83,11 +85,14 @@ class RetentionControllerIntegrationTest {
         );
         QueryService queryService = new QueryService(auditEventRepository);
         ChainVerificationService verificationService = new ChainVerificationService(auditEventRepository, canonicalHashService);
+        RedactionProperties redactionProperties = new RedactionProperties();
+        RedactionService redactionService = new RedactionService(auditEventRepository, auditEventService, redactionProperties, fixedClock);
         AuditEventController controller = new AuditEventController(
             auditEventService,
             queryService,
             verificationService,
-            retentionService
+            retentionService,
+            redactionService
         );
 
         this.mockMvc = MockMvcBuilders.standaloneSetup(controller)

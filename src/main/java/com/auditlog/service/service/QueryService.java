@@ -8,7 +8,6 @@ import org.springframework.stereotype.Service;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
-import java.util.stream.Collectors;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
@@ -19,10 +18,20 @@ public class QueryService {
     private static final int MAX_LIMIT = 200;
     private static final String CURSOR_FIELD = "chainPosition";
     private final AuditEventRepository repository;
+    private final RedactionViewService redactionViewService;
     private final ObjectMapper objectMapper = JsonMapper.builder().build();
 
     public QueryService(AuditEventRepository repository) {
         this.repository = repository;
+        this.redactionViewService = new RedactionViewService(repository, new com.auditlog.service.config.RedactionProperties());
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public QueryService(AuditEventRepository repository, RedactionViewService redactionViewService) {
+        this.repository = repository;
+        this.redactionViewService = redactionViewService != null
+            ? redactionViewService
+            : new RedactionViewService(repository, new com.auditlog.service.config.RedactionProperties());
     }
 
     public QueryResponse query(
@@ -82,9 +91,7 @@ public class QueryService {
             nextCursor = encodeCursor(lastPosition);
         }
 
-        List<AuditEventResponse> items = results.stream()
-            .map(AuditEventResponse::fromDomain)
-            .collect(Collectors.toList());
+        List<AuditEventResponse> items = redactionViewService.maskEvents(results);
 
         return new QueryResponse(items, nextCursor, hasMore);
     }

@@ -2,6 +2,7 @@ package com.auditlog.service.api;
 
 import com.auditlog.service.api.dto.ErrorResponse;
 import com.auditlog.service.service.InvalidCursorException;
+import com.auditlog.service.service.ResourceNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -72,6 +73,21 @@ public class ApiExceptionHandler {
         );
 
         return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleResourceNotFoundException(
+        ResourceNotFoundException ex,
+        WebRequest request
+    ) {
+        ErrorResponse response = new ErrorResponse(
+            HttpStatus.NOT_FOUND.value(),
+            "NOT_FOUND",
+            ex.getMessage(),
+            request.getDescription(false).replace("uri=", "")
+        );
+
+        return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
     }
 
     @ExceptionHandler(RuntimeException.class)
