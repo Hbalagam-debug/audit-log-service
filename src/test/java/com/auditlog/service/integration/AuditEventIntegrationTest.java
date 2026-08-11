@@ -16,6 +16,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
+import tools.jackson.databind.node.ObjectNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -206,6 +207,86 @@ class AuditEventIntegrationTest extends SpringBootTestSupport {
     }
 
     @Test
+    @DisplayName("GET /audit/events with limit=50 returns 200")
+    void testQueryEventsWithSupportedLimitReturns200() throws Exception {
+        createTestEvent("EVENT_1", "user-1", "ACCOUNT", "acc-1");
+
+        mockMvc.perform(
+            get("/audit/events")
+                .param("limit", "50")
+                .contentType(MediaType.APPLICATION_JSON)
+        )
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.items").isArray());
+    }
+
+    @Test
+    @DisplayName("GET /audit/events with limit=100 returns 400")
+    void testQueryEventsLimitAboveMaximumReturns400() throws Exception {
+        mockMvc.perform(
+            get("/audit/events")
+                .param("limit", "100")
+                .contentType(MediaType.APPLICATION_JSON)
+        )
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("BAD_REQUEST"))
+        .andExpect(jsonPath("$.message").value("limit must be between 1 and 50"));
+    }
+
+    @Test
+    @DisplayName("GET /audit/events with non-numeric limit returns 400 not 500")
+    void testQueryEventsInvalidLimitDoesNotReturn500() throws Exception {
+        mockMvc.perform(
+            get("/audit/events")
+                .param("limit", "abc")
+                .contentType(MediaType.APPLICATION_JSON)
+        )
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("BAD_REQUEST"))
+        .andExpect(jsonPath("$.message").value("limit must be a whole number"));
+    }
+
+    @Test
+    @DisplayName("COMPLIANCE_REPORT_GENERATED with optional null fields does not break /audit/events query")
+    void testComplianceCertificateEventWithNullOptionalFieldsDoesNotBreakQuery() throws Exception {
+        createTestEvent("EVENT_1", "user-1", "ACCOUNT", "acc-1");
+
+        ObjectNode certPayload = objectMapper.createObjectNode();
+        certPayload.put("approvalRef", "APP-REG-001");
+        certPayload.put("recordCount", 0);
+        certPayload.put("bundleDigest", "d".repeat(64));
+        certPayload.put("criteriaDigest", "c".repeat(64));
+        certPayload.put("generatedAt", "2026-08-11T00:00:00Z");
+        certPayload.putNull("reasonCode");
+        certPayload.putNull("signingKeyId");
+
+        createEventWithPayload(
+            "COMPLIANCE_REPORT_GENERATED",
+            "system:compliance-report-service",
+            "COMPLIANCE_REPORT",
+            "APP-REG-001",
+            certPayload
+        );
+
+        MvcResult result = mockMvc.perform(
+            get("/audit/events")
+                .param("limit", "50")
+                .contentType(MediaType.APPLICATION_JSON)
+        )
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.items").isArray())
+        .andReturn();
+
+        QueryResponse response = objectMapper.readValue(
+            result.getResponse().getContentAsString(),
+            QueryResponse.class
+        );
+        assertTrue(
+            response.items().stream().anyMatch(item -> "COMPLIANCE_REPORT_GENERATED".equals(item.eventType()))
+        );
+    }
+
+    @Test
     @DisplayName("limit=1 over two events returns one item per page with no duplicates")
     void testLimitOnePaginationHasNoDuplicates() throws Exception {
         createTestEvent("EVENT_1", "user-123", "ACCOUNT", "acc-1");
@@ -287,12 +368,28 @@ class AuditEventIntegrationTest extends SpringBootTestSupport {
     }
 
     private void createTestEvent(String eventType, String actorId, String resourceType, String resourceId) throws Exception {
+        createEventWithPayload(
+            eventType,
+            actorId,
+            resourceType,
+            resourceId,
+            objectMapper.createObjectNode().put("data", "test")
+        );
+    }
+
+    private void createEventWithPayload(
+        String eventType,
+        String actorId,
+        String resourceType,
+        String resourceId,
+        ObjectNode payload
+    ) throws Exception {
         AuditEventCreateRequest request = new AuditEventCreateRequest();
         request.setEventType(eventType);
         request.setActorId(actorId);
         request.setResourceType(resourceType);
         request.setResourceId(resourceId);
-        request.setPayload(objectMapper.createObjectNode().put("data", "test"));
+        request.setPayload(payload);
 
         mockMvc.perform(
             post("/audit/events")

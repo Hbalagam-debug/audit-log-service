@@ -24,7 +24,16 @@ public class AuditEventRepository {
 
     private final RowMapper<AuditEvent> eventRowMapper = (rs, rowNum) -> {
         try {
-            JsonNode payload = objectMapper.readTree(rs.getString("payload_json"));
+            String payloadJson = rs.getString("payload_json");
+            JsonNode payload;
+            if (payloadJson == null || payloadJson.isBlank()) {
+                payload = objectMapper.createObjectNode();
+            } else {
+                payload = objectMapper.readTree(payloadJson);
+                if (payload == null || payload.isNull()) {
+                    payload = objectMapper.createObjectNode();
+                }
+            }
             return new AuditEvent(
                 rs.getString("id"),
                 rs.getLong("chain_position"),

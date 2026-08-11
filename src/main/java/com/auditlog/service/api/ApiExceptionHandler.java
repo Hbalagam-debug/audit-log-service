@@ -7,6 +7,7 @@ import com.auditlog.service.service.ResourceNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
@@ -59,6 +60,26 @@ public class ApiExceptionHandler {
                 ? HttpStatus.PAYLOAD_TOO_LARGE 
                 : HttpStatus.BAD_REQUEST
         );
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleMethodArgumentTypeMismatchException(
+        MethodArgumentTypeMismatchException ex,
+        WebRequest request
+    ) {
+        String message = "Invalid request parameter";
+        if ("limit".equals(ex.getName())) {
+            message = "limit must be a whole number";
+        }
+
+        ErrorResponse response = new ErrorResponse(
+            HttpStatus.BAD_REQUEST.value(),
+            "BAD_REQUEST",
+            message,
+            request.getDescription(false).replace("uri=", "")
+        );
+
+        return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
     }
 
     @ExceptionHandler(InvalidCursorException.class)

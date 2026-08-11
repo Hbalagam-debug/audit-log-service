@@ -15,7 +15,7 @@ import tools.jackson.databind.json.JsonMapper;
 @Service
 public class QueryService {
     private static final int DEFAULT_LIMIT = 50;
-    private static final int MAX_LIMIT = 200;
+    private static final int MAX_LIMIT = 50;
     private static final String CURSOR_FIELD = "chainPosition";
     private final AuditEventRepository repository;
     private final RedactionViewService redactionViewService;
@@ -49,7 +49,7 @@ public class QueryService {
             limit = DEFAULT_LIMIT;
         }
         if (limit < 1 || limit > MAX_LIMIT) {
-            limit = Math.min(Math.max(limit, 1), MAX_LIMIT);
+            throw new IllegalArgumentException("limit must be between 1 and " + MAX_LIMIT);
         }
 
         if (from != null && to != null) {

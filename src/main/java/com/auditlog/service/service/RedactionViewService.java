@@ -6,6 +6,8 @@ import com.auditlog.service.domain.AuditEvent;
 import com.auditlog.service.domain.AuditEventEncryptionKey;
 import com.auditlog.service.domain.RedactionOverlay;
 import com.auditlog.service.repository.AuditEventRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -19,6 +21,7 @@ import tools.jackson.databind.JsonNode;
 
 @Service
 public class RedactionViewService {
+    private static final Logger logger = LoggerFactory.getLogger(RedactionViewService.class);
     private final AuditEventRepository repository;
     private final RedactionProperties redactionProperties;
     private final PayloadEncryptionService payloadEncryptionService;
@@ -54,11 +57,18 @@ public class RedactionViewService {
         List<AuditEventResponse> responses = new ArrayList<>();
         for (AuditEvent event : events) {
             List<RedactionOverlay> eventOverlays = overlaysByEvent.getOrDefault(event.getId(), List.of());
-            PayloadEncryptionService.PayloadViewResult payloadViewResult = payloadEncryptionService.renderPayloadForResponse(
-                event,
-                encryptionKeysByEvent.getOrDefault(event.getId(), List.of()),
-                redactionProperties.getMaskValue()
-            );
+            PayloadEncryptionService.PayloadViewResult payloadViewResult;
+            List<AuditEventEncryptionKey> eventEncryptionKeys = encryptionKeysByEvent.getOrDefault(event.getId(), List.of());
+            try {
+                payloadViewResult = payloadEncryptionService.renderPayloadForResponse(
+                    event,
+                    eventEncryptionKeys,
+                    redactionProperties.getMaskValue()
+                );
+            } catch (PayloadDecryptionException ex) {
+                logger.warn("Falling back to masked encrypted payload rendering for eventId={}", event.getId());
+                payloadViewResult = maskEncryptedEnvelopesWithoutDecrypt(event, eventEncryptionKeys);
+            }
             JsonNode maskedPayload = payloadViewResult.payload();
             List<String> pointerList = eventOverlays.stream()
                 .map(RedactionOverlay::getJsonPointer)
@@ -74,6 +84,44 @@ public class RedactionViewService {
             responses.add(AuditEventResponse.fromDomain(event, maskedPayload, mergedPointers));
         }
         return responses;
+    }
+
+    private PayloadEncryptionService.PayloadViewResult maskEncryptedEnvelopesWithoutDecrypt(
+        AuditEvent event,
+        List<AuditEventEncryptionKey> eventEncryptionKeys
+    ) {
+        JsonNode payload = event.getPayload().deepCopy();
+        List<String> maskedPointers = new ArrayList<>();
+        List<String> encryptedPointers = new ArrayList<>();
+        for (AuditEventEncryptionKey key : eventEncryptionKeys) {
+            encryptedPointers.addAll(key.getEncryptedPointers());
+        }
+        encryptedPointers.addAll(encryptionManagedPointers());
+
+        for (String pointer : encryptedPointers.stream().distinct().sorted().toList()) {
+            JsonNode node = JsonPointerUtils.getNode(payload, pointer);
+            if (node == null || !payloadEncryptionService.isEncryptedEnvelope(node)) {
+                continue;
+            }
+            JsonPointerUtils.setValue(
+                payload,
+                pointer,
+                tools.jackson.databind.node.JsonNodeFactory.instance.textNode(redactionProperties.getMaskValue())
+            );
+            maskedPointers.add(pointer);
+        }
+
+        return new PayloadEncryptionService.PayloadViewResult(
+            payload,
+            maskedPointers.stream().distinct().sorted().toList()
+        );
+    }
+
+    private List<String> encryptionManagedPointers() {
+        List<String> knownPointers = List.of("/accountNumber", "/personalIdentifier");
+        return knownPointers.stream()
+            .filter(payloadEncryptionService::managesPointer)
+            .toList();
     }
 
     public AuditEventResponse maskEvent(AuditEvent event) {
